@@ -10,7 +10,9 @@ router.post(
     { name: "cnicFront", maxCount: 1 },
     { name: "cnicBack", maxCount: 1 },
     { name: "licenseFront", maxCount: 1 },
-    { name: "licenseBack", maxCount: 1 }
+    { name: "licenseBack", maxCount: 1 },
+    { name: "profilePic", maxCount: 1 },
+
   ]),
   userController.createUser
 );

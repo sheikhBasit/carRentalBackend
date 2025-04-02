@@ -39,25 +39,29 @@ exports.createUser = async (req, res) => {
     const licenseBackUrl = req.files?.licenseBack?.length > 0
       ? await uploadOnCloudinary(req.files.licenseBack[0].path)
       : null;
-
+      const profilePic = req.files?.profilePic?.length > 0
+      ? await uploadOnCloudinary(req.files.profilePic[0].path)
+      : null;
     // Validate required images
-    if (!cnicFrontUrl || !cnicBackUrl || !licenseFrontUrl || !licenseBackUrl) {
+    if (!cnicFrontUrl || !cnicBackUrl || !licenseFrontUrl || !licenseBackUrl || !profilePic) {
       return res.status(400).json({ message: 'All required images (CNIC & License) must be uploaded' });
     }
 
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
     const verificationToken = Math.floor(100000 + Math.random() * 900000).toString();
+    const normalizedEmail = email.trim().toLowerCase();
 
     // Create new user
     const user = new User({
       ...userData,
-      email,
+      email:normalizedEmail,
       password: hashedPassword,
       cnicFrontUrl: cnicFrontUrl.url,
       cnicBackUrl: cnicBackUrl.url,
       licenseFrontUrl: licenseFrontUrl.url,
       licenseBackUrl: licenseBackUrl.url,
+      profilePic: profilePic.url,
       verificationToken,
       verificationTokenExpiresAt: Date.now() + 24 * 60 * 60 * 1000, // 24 hours
     });
@@ -93,6 +97,8 @@ exports.getUserById = async (req, res) => {
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
+    console.log(user.fcmToken);
+    
     res.status(200).json(user);
   } catch (error) {
     console.error('Error in getUserById:', error);
@@ -104,7 +110,8 @@ exports.getUserById = async (req, res) => {
 exports.updateUser = async (req, res) => {
   try {
     const { password, ...updateData } = req.body;
-
+    console.log('Update Data:', req.body);
+    
     if (password) {
       updateData.password = await bcrypt.hash(password, 10);
     }
@@ -182,9 +189,12 @@ exports.verifyEmail = async (req, res) => {
 // Login
 exports.login = async (req, res) => {
   const { email, password } = req.body;
-
+  const normalizedEmail = email.trim().toLowerCase();
+  if (!email || !password) {
+    return res.status(400).json({ success: false, message: 'Email and password are required' });
+  }
   try {
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ email:normalizedEmail });
     if (!user) {
       return res.status(400).json({ success: false, message: 'Invalid credentials' });
     }

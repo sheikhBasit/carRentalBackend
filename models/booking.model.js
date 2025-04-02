@@ -9,8 +9,10 @@ const bookingSchema = new Schema(
     driver: { type: Schema.Types.ObjectId, ref: 'Driver', default: null }, // Optional driver reference
     from: { type: String, required: true }, // Start location
     to: { type: String, required: true }, // End location
+    fromTime: { type: String, required: true }, // Start time
+    toTime: { type: String, required: true }, // End time
     intercity: { type: Boolean, required: true }, // True for intercity, False for intracity
-    cityName: { type: String, required: false }, // City name of booking
+    cityName: { type: String, required: false, lowercase: true  }, // City name of booking
     status: {
       type: String,
       enum: ['pending', 'confirmed', 'ongoing', 'completed', 'canceled'],

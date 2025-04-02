@@ -1,6 +1,6 @@
 const express = require('express');
-const {createBooking , getAllBookings,getBookingByUserId ,getBookingByCompanyId, getBookingById , updateBooking , deleteBooking} = require('../controllers/booking.controller');
 const router = express.Router();
+const {createBooking , getAllBookings,getBookingByUserId ,getBookingByCompanyId, getBookingById , updateBooking , deleteBooking} = require('../controllers/booking.controller');
 
 // Define booking routes
 router.post('/postBooking', createBooking);
