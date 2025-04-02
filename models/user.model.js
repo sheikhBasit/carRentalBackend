@@ -6,8 +6,10 @@ const userSchema = new mongoose.Schema({
   password: { type: String, required: true },
   phoneNo: { type: String, required: true },
   address: { type: String, required: true },
+  profilePic: { type: String, required: false },
   accountNo: { type: String, required: true, unique: true },
   city: { type: String, required: true },
+  fcmToken: { type: String, required: false }, // For Firebase Cloud Messaging, optional
   province: { type: String, required: true },
   license: { type: String, required: true },
   licenseFrontUrl: { type: String, required: true },
@@ -28,7 +30,6 @@ isVerified:{
   verificationToken: String,
   verificationPasswordToken: Date,
   verificationTokenExpiresAt: Date,
-  fcmtoken: { type: String, required: false }, // For Firebase Cloud Messaging, optional
 }, {
   timestamps: true  // Adds createdAt and updatedAt fields automatically
 });

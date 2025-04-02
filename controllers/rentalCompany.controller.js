@@ -64,6 +64,7 @@ exports.getAllRentalCompanies = async (req, res) => {
 // Get a single rental company by ID
 exports.getRentalCompanyById = async (req, res) => {
   try {
+    console.log(req.params.id);
     const company = await RentalCompany.findById(req.params.id);
     if (!company) return res.status(404).json({ message: 'Rental company not found' });
     return res.status(200).json(company);
@@ -111,6 +112,8 @@ exports.getRentalCompanyByEmail = async (req, res) => {
 exports.updateRentalCompany = async (req, res) => {
   try {
     const { password, ...updateData } = req.body;
+    console.log(req.body);
+    
     if (password) updateData.password = await bcrypt.hash(password, 10);
     const company = await RentalCompany.findByIdAndUpdate(req.params.id, updateData, { new: true });
     if (!company) return res.status(404).json({ message: 'Rental company not found' });

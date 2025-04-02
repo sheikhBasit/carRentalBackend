@@ -14,7 +14,7 @@ const createBooking = async (req, res) => {
     if (!userExists) {
       return res.status(404).json({ error: "User not found" });
     }
-    
+
     // Create a new booking with the user reference
     const booking = new Booking({
       ...bookingData,
@@ -76,7 +76,7 @@ const getBookingByUserId = async (req, res) => {
               $project: {
                 manufacturer: 1,
                 model: 1,
-                carImageUrl: 1,
+                carImageUrls: 1,
                 transmission: 1,
                 rent: 1,
               },
@@ -152,7 +152,7 @@ const getBookingByCompanyId = async (req, res) => {
               $project: {
                 manufacturer: 1,
                 model: 1,
-                carImageUrl: 1,
+                carImageUrls: 1,
                 transmission: 1,
                 rent: 1,
               },

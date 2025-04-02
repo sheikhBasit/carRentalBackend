@@ -41,7 +41,6 @@ exports.createDriver = async (req, res) => {
 // Get all drivers
 exports.getAllDrivers = async (req, res) => {
   try {
-    const {company} = req.query
     const drivers = await Driver.find()
     if(!drivers || drivers.length === 0){
       res.status(404).json({message:"No Driver is found"})
