@@ -24,15 +24,8 @@ router.get("/liked-vehicles/:userId", async (req, res) => {
 });
 
 // Unlike a vehicle
-router.post("/unlike", async (req, res) => {
-  try {
-    const { vehicleId, userId } = req.body;
-    const result = await likeController.unlikeVehicle(vehicleId, userId);
-    res.status(200).json(result);
-  } catch (error) {
-    res.status(500).json({ message: "Error unliking vehicle" });
-  }
-});
+// routes/likeRoutes.js
+router.delete('/unlike/:vehicleId/:userId', likeController.unlikeVehicle);
 
 // Get likes for a vehicle
 router.get("/:vehicleId", async (req, res) => {
