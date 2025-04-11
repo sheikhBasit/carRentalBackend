@@ -14,6 +14,15 @@ router.post("/", async (req, res) => {
   }
 });
 
+router.get("/liked-vehicles/:userId", async (req, res) => {
+  try {
+    const vehicles = await likeController.getLikedVehiclesByUser(req.params.userId);
+    res.status(200).json(vehicles);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch liked vehicles." });
+  }
+});
+
 // Unlike a vehicle
 router.post("/unlike", async (req, res) => {
   try {
