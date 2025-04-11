@@ -12,6 +12,17 @@ exports.likeVehicle = async (vehicleId, userId) => {
     throw error;
   }
 };
+// Get vehicles liked by a user
+exports.getLikedVehiclesByUser = async (userId) => {
+  try {
+    const likedVehicles = await Like.find({ userId }).populate("vehicleId");
+    return likedVehicles.map(like => like.vehicleId);
+  } catch (error) {
+    console.error("Error fetching liked vehicles by user:", error);
+    throw error;
+  }
+};
+
 
 // Unlike a vehicle
 exports.unlikeVehicle = async (vehicleId, userId) => {
