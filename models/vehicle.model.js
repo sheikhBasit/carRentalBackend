@@ -1,26 +1,48 @@
-  const mongoose = require('mongoose');
-  const { Schema } = mongoose;
-  const mongooseAggregatePaginate =require ( "mongoose-aggregate-paginate-v2");
+const mongoose = require('mongoose');
+const { Schema } = mongoose;
+const mongooseAggregatePaginate = require("mongoose-aggregate-paginate-v2");
 
-  const vehicleSchema = new mongoose.Schema({
-    company: { 
-      type: Schema.Types.ObjectId,
-      ref:"RentalCompany",
-      required: true }, // Rental company name
-    manufacturer: { type: String, required: true, lowercase: true  }, // Car manufacturer (e.g., Toyota, Honda)
-    model: { type: String, required: true, lowercase: true  }, // Car model (e.g., Corolla, Civic)
-    numberPlate: { type: String, required: true, unique: true }, // Unique vehicle registration number
-    carImageUrls: [{ type: String }], 
-    trips: { type: Number, default: 0 }, // Number of trips made by the vehicle
+const availabilitySchema = new Schema({
+  days: {
+    type: [String],
+    enum: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
+    required: true
+  },
+  startTime: { type: String, required: true }, // Format: "HH:MM"
+  endTime: { type: String, required: true }   // Format: "HH:MM"
+});
 
-    rent: { type: Number, required: true }, // Rental price
-    capacity: { type: Number, required: true }, // Seating capacity
-    transmission: { type: String, enum: ['Auto', 'Manual'], required: true } // Defines transmission type
-  }, {
-    timestamps: true // Automatically adds createdAt and updatedAt fields
-  });
+const citySchema = new Schema({
+  name: { type: String, required: true },
+  additionalFee: { type: Number, default: 0 }
+});
 
-  vehicleSchema.plugin(mongooseAggregatePaginate)
-  const Vehicle = mongoose.model('Vehicle', vehicleSchema);
+const vehicleSchema = new mongoose.Schema({
+  company: { 
+    type: Schema.Types.ObjectId,
+    ref: "RentalCompany",
+    required: true 
+  },
+  manufacturer: { type: String, required: true, lowercase: true },
+  model: { type: String, required: true, lowercase: true },
+  numberPlate: { type: String, required: true, unique: true },
+  carImageUrls: [{ type: String }],
+  trips: { type: Number, default: 0 },
+  rent: { type: Number, required: true },
+  capacity: { type: Number, required: true },
+  transmission: { type: String, enum: ['Auto', 'Manual'], required: true },
+  availability: availabilitySchema,
+  cities: [citySchema],
+  isAvailable: { type: Boolean, default: true },
+  bookings: [{
+    type: Schema.Types.ObjectId,
+    ref: 'Booking'
+  }]
+}, {
+  timestamps: true
+});
 
-  module.exports = Vehicle;
+vehicleSchema.plugin(mongooseAggregatePaginate);
+const Vehicle = mongoose.model('Vehicle', vehicleSchema);
+
+module.exports = Vehicle;
