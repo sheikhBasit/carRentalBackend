@@ -4,25 +4,33 @@ const { uploadOnCloudinary } = require('../utils/connectCloudinary.js');
 const fs =  require('fs');
 const mongoose =  require('mongoose');
 
-// Create Vehicle
+
+
+// Create Vehicle (updated to include availability and cities)
 exports.createVehicle = async (req, res) => {
   try {
-    console.log(req.body);
-    console.log("req.files", req.files); // Debugging - See what files are received
-
-    const { numberPlate, companyId, ...vehicleData } = req.body; // Ensure companyId is extracted
+    const { numberPlate, companyId, availability, cities, ...vehicleData } = req.body;
 
     if (!companyId) {
       return res.status(400).json({ message: "Company ID is required" });
     }
 
-    // Check if a vehicle with the same number plate exists
+    // Validate availability
+    if (!availability || !availability.days || !availability.startTime || !availability.endTime) {
+      return res.status(400).json({ message: "Availability information is required" });
+    }
+
+    // Validate cities
+    if (!cities || cities.length === 0) {
+      return res.status(400).json({ message: "At least one city must be specified" });
+    }
+
     const existingVehicle = await Vehicle.findOne({ numberPlate });
     if (existingVehicle) {
       return res.status(400).json({ message: "Vehicle with this number plate already exists" });
     }
 
-    // Upload multiple images to Cloudinary
+    // Upload images
     const carImageUrls = [];
     if (req.files && req.files.length > 0) {
       for (const file of req.files) {
@@ -37,12 +45,15 @@ exports.createVehicle = async (req, res) => {
       return res.status(400).json({ message: "At least one car image is required" });
     }
 
-    // Save to DB
+    // Create new vehicle
     const vehicle = new Vehicle({
       ...vehicleData,
       numberPlate,
-      company: companyId, // Ensure company ID is assigned
-      carImageUrls, // Store array of Cloudinary URLs in DB
+      company: companyId,
+      carImageUrls,
+      availability,
+      cities,
+      isAvailable: true
     });
 
     await vehicle.save();
@@ -56,6 +67,189 @@ exports.createVehicle = async (req, res) => {
     return res.status(500).json({ error: error.message });
   }
 };
+
+// Get available vehicles (updated to exclude booked vehicles)
+exports.getAllVehicles = async (req, res) => {
+  try {
+    const { city, date, time } = req.query;
+    const normalizedCity = city?.toLowerCase().replace(/\s+/g, "00");
+
+    // Get current bookings to exclude
+    const currentBookings = await Booking.find({
+      status: { $in: ['confirmed', 'pending'] },
+      $or: [
+        { from: { $lte: new Date(date) }, to: { $gte: new Date(date) } },
+        { fromTime: { $lte: time }, toTime: { $gte: time } }
+      ]
+    }).select('idVehicle');
+
+    const bookedVehicleIds = currentBookings.map(b => b.idVehicle);
+
+    const aggregationPipeline = [
+      {
+        $lookup: {
+          from: "rentalcompanies",
+          localField: "company",
+          foreignField: "_id",
+          as: "company",
+          pipeline: [
+            {
+              $project: {
+                companyName: 1,
+                gmail: 1,
+                address: 1,
+                phNum: 1,
+                bankDetails: 1,
+                city: 1
+              }
+            }
+          ]
+        }
+      },
+      { $unwind: "$company" },
+      {
+        $match: {
+          isAvailable: true,
+          _id: { $nin: bookedVehicleIds },
+          ...(normalizedCity && { "company.city": normalizedCity }),
+          ...(date && { 
+            "availability.days": { 
+              $in: [new Date(date).toLocaleString('en-US', { weekday: 'long' })] 
+            } 
+          }),
+          ...(time && {
+            "availability.startTime": { $lte: time },
+            "availability.endTime": { $gte: time }
+          })
+        }
+      },
+      {
+        $lookup: {
+          from: "bookings",
+          localField: "_id",
+          foreignField: "idVehicle",
+          as: "bookings",
+          pipeline: [
+            { $match: { status: "completed" } }
+          ]
+        }
+      },
+      {
+        $addFields: {
+          trips: { $size: "$bookings" }
+        }
+      }
+    ];
+
+    const vehicles = await Vehicle.aggregate(aggregationPipeline);
+
+    if (!vehicles || vehicles.length === 0) {
+      return res.status(404).json({ 
+        message: "No available vehicles found" + 
+          (city ? ` in ${city}` : '') +
+          (date ? ` on ${date}` : '') +
+          (time ? ` at ${time}` : '')
+      });
+    }
+
+    return res.status(200).json(vehicles);
+  } catch (error) {
+    console.error("Error fetching vehicles:", error);
+    return res.status(500).json({ error: error.message });
+  }
+};
+
+// Get vehicle by ID (updated to include booking status)
+exports.getVehicleById = async (req, res) => {
+  try {
+    const { date, time } = req.query;
+    const vehicleId = req.params.id;
+
+    const aggregationPipeline = [
+      {
+        $match: { _id: new mongoose.Types.ObjectId(vehicleId) }
+      },
+      {
+        $lookup: {
+          from: "rentalcompanies",
+          localField: "company",
+          foreignField: "_id",
+          as: "company",
+          pipeline: [
+            {
+              $project: {
+                companyName: 1,
+                gmail: 1,
+                address: 1,
+                phNum: 1,
+                bankDetails: 1,
+                city: 1
+              }
+            }
+          ]
+        }
+      },
+      { $unwind: "$company" },
+      {
+        $lookup: {
+          from: "bookings",
+          localField: "_id",
+          foreignField: "idVehicle",
+          as: "bookings",
+          pipeline: [
+            { $match: { status: { $in: ['confirmed', 'pending'] } } }
+          ]
+        }
+      },
+      {
+        $addFields: {
+          isAvailable: {
+            $cond: {
+              if: { $gt: [{ $size: "$bookings" }, 0] },
+              then: false,
+              else: true
+            }
+          },
+          availableDates: {
+            $filter: {
+              input: "$availability.days",
+              as: "day",
+              cond: {
+                $and: [
+                  ...(date ? [{
+                    $eq: [
+                      "$$day",
+                      new Date(date).toLocaleString('en-US', { weekday: 'long' })
+                    ]
+                  }] : []),
+                  ...(time ? [{
+                    $and: [
+                      { $lte: ["$availability.startTime", time] },
+                      { $gte: ["$availability.endTime", time] }
+                    ]
+                  }] : [])
+                ]
+              }
+            }
+          }
+        }
+      }
+    ];
+
+    const result = await Vehicle.aggregate(aggregationPipeline);
+
+    if (!result || result.length === 0) {
+      return res.status(404).json({ message: "Vehicle not found" });
+    }
+
+    const vehicle = result[0];
+    return res.status(200).json(vehicle);
+  } catch (error) {
+    console.error("Error fetching vehicle:", error);
+    return res.status(500).json({ error: error.message });
+  }
+};
+
 
 // Get all vehicles
 // exports.getAllVehicles = async (req, res) => {
@@ -229,69 +423,6 @@ exports.fetchAllVehicles = async (req, res) => {
 };
 
 
-exports.getAllVehicles = async (req, res) => {
-  try {
-    const { city } = req.query; // Extract city from query parameters
-    const normalizedCity = city.toLowerCase().replace(/\s+/g, "00");
-
-    const vehicles = await Vehicle.aggregate([
-      {
-        $lookup: {
-          from: "rentalcompanies", // Join with rental companies
-          localField: "company",
-          foreignField: "_id",
-          as: "company",
-          pipeline: [
-            {
-              $project: {
-                companyName: 1,
-                gmail: 1,
-                address: 1,
-                phNum: 1,
-                bankDetails: 1,
-                city: 1
-              }
-            }
-          ]
-        }
-      },
-      { $unwind: "$company" }, // Unwind the company array
-      {
-        $match: {
-          "company.city": normalizedCity // Filter by city
-        }
-      },
-      {
-        $lookup: {
-          from: "bookings", // Join with bookings
-          localField: "_id",
-          foreignField: "idVehicle",
-          as: "bookings",
-          pipeline: [
-            {
-              $match: {
-                status: "completed" // Filter for completed bookings
-              }
-            }
-          ]
-        }
-      },
-      {
-        $addFields: {
-          trips: { $size: "$bookings" } // Count completed bookings and update trips
-        }
-      }
-    ]);
-
-    if (!vehicles || vehicles.length === 0) {
-      return res.status(404).json({ message: "No Vehicle Found for this city" });
-    }
-
-    return res.status(200).json(vehicles);
-  } catch (error) {
-    return res.status(500).json({ error: error.message });
-  }
-};
 
 exports.getLikedVehicles = async (req, res) => {
   try {
@@ -353,45 +484,7 @@ exports.getManufacturers = async (req, res) => {
   }
 };
 
-// Get a single vehicle by ID
-exports.getVehicleById = async (req, res) => {
-  try {
-    const vehicle = await Vehicle.aggregate([
-      {
-        $match: { _id: new mongoose.Types.ObjectId(req.params.id) }, // Match the vehicle by ID
-      },
-      {
-        $lookup: {
-          from: "rentalcompanies", // Join with the RentalCompany collection
-          localField: "company", // Field in the Vehicle collection
-          foreignField: "_id", // Field in the RentalCompany collection
-          as: "company", // Output array field
-          pipeline: [
-            {
-              $project: {
-                companyName: 1,
-                gmail: 1,
-                address: 1,
-                phNum: 1,
-                bankDetails: 1,
-                city: 1,
-              },
-            },
-          ],
-        },
-      },
-      { $unwind: "$company" }, // Unwind the company array to get a single object
-    ]);
 
-    if (!vehicle || vehicle.length === 0) {
-      return res.status(404).json({ message: "Vehicle not found" });
-    }
-
-    return res.status(200).json(vehicle[0]); // Return the first (and only) vehicle
-  } catch (error) {
-    return res.status(500).json({ error: error.message });
-  }
-};
 
 // Update a vehicle
 exports.updateVehicle = async (req, res) => {
