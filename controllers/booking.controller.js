@@ -4,37 +4,46 @@ const User = require('../models/user.model.js'); // Ensure the correct path
 
 const createBooking = async (req, res) => {
   try {
-    console.log("Received data:", req.body); // Debugging log
+    console.log("Received booking request with data:", req.body);
 
-    // Extract user ID and other booking data from the request body
     const { user, ...bookingData } = req.body;
 
-    // Check if the user exists
+    if (!user) {
+      console.log("No user ID provided in request");
+      return res.status(400).json({ error: "User ID is required" });
+    }
+
     const userExists = await User.findById(user);
     if (!userExists) {
+      console.log(`User not found with ID: ${user}`);
       return res.status(404).json({ error: "User not found" });
     }
 
-    // Create a new booking with the user reference
     const booking = new Booking({
       ...bookingData,
-      user: user, // Reference to the user
+      user: user,
     });
 
-    // Save the booking to the database
     await booking.save();
+    console.log("Booking created successfully:", booking);
 
-    // Populate the user field in the booking document
-    const populatedBooking = await Booking.findById(booking._id).populate("user", "name email");
+    const populatedBooking = await Booking.findById(booking._id)
+      .populate("user", "name email")
+      .populate("idVehicle", "manufacturer model");
 
-    console.log("Booking saved:", populatedBooking); // Debugging log
-    return res.status(201).json({ message: "Booking created successfully", booking: populatedBooking });
+    return res.status(201).json({ 
+      success: true,
+      message: "Booking created successfully", 
+      booking: populatedBooking 
+    });
   } catch (error) {
-    console.error("Error creating booking:", error); // Log error
-    return res.status(400).json({ error: error.message });
+    console.error("Error creating booking:", error);
+    return res.status(500).json({ 
+      success: false,
+      error: error.message 
+    });
   }
 };
-
 const getAllBookings = async (req, res) => {
   console.log("get all bookings");
   
