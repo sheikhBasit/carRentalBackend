@@ -33,7 +33,7 @@ app.use('/likes', likeRoutes);
 app.use('/stripe', stripeRoute);
 
 // Database connection
-const dbURL = process.env.MONGO_DB_URL || "mongodb+srv://bilalbackend:bilal123@cluster0.1o693gf.mongodb.net/";
+const dbURL =  "mongodb+srv://bilalbackend:bilal123@cluster0.1o693gf.mongodb.net/";
 
 const connectDB = async () => {
   try {
