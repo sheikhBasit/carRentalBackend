@@ -14,10 +14,19 @@ exports.createVehicle = async (req, res) => {
     if (!companyId) {
       return res.status(400).json({ message: "Company ID is required" });
     }
-
+    console.log(availability)
     // Validate availability
-    if (!availability || !availability.days || !availability.startTime || !availability.endTime) {
+    if (!availability ) {
       return res.status(400).json({ message: "Availability information is required" });
+    }
+    if (!availability.days) {
+      return res.status(400).json({ message: "Availability information days is required" });
+    }
+    if ( !availability.startTime ) {
+      return res.status(400).json({ message: "Availability information  startTime is required" });
+    }
+    if ( !availability.endTime) {
+      return res.status(400).json({ message: "Availability information endTime is required" });
     }
 
     // Validate cities

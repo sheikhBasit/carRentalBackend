@@ -26,7 +26,7 @@ const vehicleSchema = new mongoose.Schema({
   manufacturer: { type: String, required: true, lowercase: true },
   model: { type: String, required: true, lowercase: true },
   numberPlate: { type: String, required: true, unique: true },
-  carImageUrls: [{ type: String }],
+  carImageUrls: [{ type: String, unique: false }],
   trips: { type: Number, default: 0 },
   rent: { type: Number, required: true },
   capacity: { type: Number, required: true },

@@ -31,6 +31,11 @@ app.use('/comment', commentRoutes);
 app.use('/likes', likeRoutes);
 app.use('/stripe', stripeRoute);
 
+// Health check route
+app.get('/', (req, res) => {
+  res.send('Server is running!');
+});
+
 // Database connection
 const dbURL = process.env.MONGO_DB_URL;
 
@@ -41,18 +46,56 @@ const connectDB = async () => {
       useUnifiedTopology: true,
     });
     console.log('✅ MongoDB Connected Successfully');
+    
+    // After connection, remove problematic index
+    await removeProblematicIndex();
   } catch (error) {
     console.error('❌ MongoDB Connection Failed:', error.message);
     process.exit(1);
   }
 };
 
-connectDB();
+async function removeProblematicIndex() {
+  try {
+    const collection = mongoose.connection.db.collection('vehicles');
+    const indexes = await collection.indexes();
+    
+    // Find and drop the problematic index
+    const problematicIndex = indexes.find(index => 
+      index.key?.carImageUrl === 1 || index.key?.carImageUrls === 1
+    );
+    
+    if (problematicIndex) {
+      await collection.dropIndex(problematicIndex.name);
+      console.log('✅ Successfully dropped problematic index:', problematicIndex.name);
+    } else {
+      console.log('ℹ️ No problematic index found');
+    }
+  } catch (error) {
+    console.log('⚠️ Index removal error (may already be dropped):', error.message);
+  }
+}
 
-// Health check
-app.get('/', (req, res) => {
-  res.send('Server is running!');
+// Start server only after DB connection is established
+const startServer = async () => {
+  try {
+    await connectDB();
+    
+    const PORT = process.env.PORT || 3000;
+    app.listen(PORT, () => {
+      console.log(`🚀 Server is running on http://localhost:${PORT}`);
+    });
+  } catch (error) {
+    console.error('❌ Failed to start server:', error);
+    process.exit(1);
+  }
+};
+
+startServer();
+
+// Handle shutdown gracefully
+process.on('SIGINT', async () => {
+  await mongoose.connection.close();
+  console.log('⏏️ MongoDB connection closed due to app termination');
+  process.exit(0);
 });
-
-// Export the Express app as a serverless function
-module.exports = app;
