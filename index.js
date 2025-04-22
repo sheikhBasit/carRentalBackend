@@ -1,4 +1,5 @@
 require('dotenv').config();
+
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
@@ -21,75 +22,68 @@ const commentRoutes = require('./routes/commentRoutes.js');
 const likeRoutes = require('./routes/likeRoutes.js');
 const stripeRoute = require('./routes/payment.route.js');
 
-app.use('/users', userRoutes);
-app.use('/bookings', bookingRoutes);
-app.use('/drivers', driverRoutes);
-app.use('/rental-companies', rentalCompanyRoutes);
-app.use('/vehicles', vehicleRoutes);
-app.use('/auth', authRoute);
-app.use('/comment', commentRoutes);
-app.use('/likes', likeRoutes);
-app.use('/stripe', stripeRoute);
+// Use routes with proper prefixes
+app.use('/api/users', userRoutes);
+app.use('/api/bookings', bookingRoutes);
+app.use('/api/drivers', driverRoutes);
+app.use('/api/rental-companies', rentalCompanyRoutes);
+app.use('/api/vehicles', vehicleRoutes);
+app.use('/api/auth', authRoute);
+app.use('/api/comment', commentRoutes);
+app.use('/api/likes', likeRoutes);
+app.use('/api/stripe', stripeRoute);
 
-// Health check route
+// Health check
 app.get('/', (req, res) => {
-  res.send('Server is running!');
+  res.send('🚀 Server is running!');
+});
+
+// Error handling
+app.use((err, req, res, next) => {
+  console.error('❌ Error:', err.stack);
+  res.status(500).json({ error: 'Internal Server Error' });
+});
+
+// 404 handler
+app.use((req, res) => {
+  res.status(404).json({ error: 'Not Found' });
 });
 
 // Database connection
 const dbURL = process.env.MONGO_DB_URL;
 
 const connectDB = async () => {
+  if (!dbURL) {
+    console.error('❌ MongoDB connection URL is missing in .env');
+    process.exit(1);
+  }
+
   try {
     await mongoose.connect(dbURL, {
       useNewUrlParser: true,
       useUnifiedTopology: true,
     });
-    console.log('✅ MongoDB Connected Successfully');
-    
-    // After connection, remove problematic index
+    console.log('✅ MongoDB connected');
   } catch (error) {
-    console.error('❌ MongoDB Connection Failed:', error.message);
+    console.error('❌ MongoDB connection error:', error.message);
     process.exit(1);
   }
 };
 
-// async function removeProblematicIndex() {
-//   try {
-//     const collection = mongoose.connection.db.collection('vehicles');
-//     const indexes = await collection.indexes();
-    
-//     // Find and drop the problematic index
-//     const problematicIndex = indexes.find(index => 
-//       index.key?.carImageUrl === 1 || index.key?.carImageUrls === 1
-//     );
-    
-//     if (problematicIndex) {
-//       await collection.dropIndex(problematicIndex.name);
-//       console.log('✅ Successfully dropped problematic index:', problematicIndex.name);
-//     } else {
-//       console.log('ℹ️ No problematic index found');
-//     }
-//   } catch (error) {
-//     console.log('⚠️ Index removal error (may already be dropped):', error.message);
-//   }
-// }
-
-// Export the Vercel handler
-module.exports = async (req, res) => {
-  // Ensure database is connected
-  if (mongoose.connection.readyState === 0) {
-    await connectDB();
+// Start the server locally only (Vercel handles listen automatically)
+const startServer = async () => {
+  await connectDB();
+  const PORT = process.env.PORT || 3000;
+  if (process.env.VERCEL_ENV !== 'production') {
+    app.listen(PORT, () => {
+      console.log(`🚀 Server listening on http://localhost:${PORT}`);
+    });
   }
-  
-  // Pass the request to Express
-  app(req, res);
 };
 
+// Start if not running on Vercel (exporting for Vercel)
+if (require.main === module) {
+  startServer();
+}
 
-// Handle shutdown gracefully
-process.on('SIGINT', async () => {
-  await mongoose.connection.close();
-  console.log('⏏️ MongoDB connection closed due to app termination');
-  process.exit(0);
-});
+module.exports = app;
