@@ -81,7 +81,7 @@ app.use((req, res) => {
 });
 
 // Local dev server only (Vercel auto-handles production)
-if (!process.env.VERCEL) {
+if (!process.env.VERCEL_ENV) {
   const PORT = process.env.PORT || 3000;
   connectDB().then(() => {
     app.listen(PORT, () => {
