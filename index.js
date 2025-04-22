@@ -5,38 +5,10 @@ const cors = require('cors');
 
 const app = express();
 
-// CORS middleware
-app.use(cors({
-  origin: process.env.ALLOWED_ORIGINS?.split(',') || '*',
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
-}));
+// Middleware
+app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-
-// MongoDB connection setup
-const dbURL = process.env.MONGO_DB_URL;
-
-if (!dbURL) {
-  console.error('❌ MongoDB connection URL is missing');
-  process.exit(1);
-}
-
-let isConnected = false;
-
-const connectDB = async () => {
-  if (isConnected) return;
-  try {
-    const db = await mongoose.connect(dbURL, {
-      useNewUrlParser: true,
-      useUnifiedTopology: true
-    });
-    isConnected = db.connections[0].readyState;
-    console.log('✅ MongoDB connected');
-  } catch (error) {
-    console.error('❌ MongoDB connection failed:', error.message);
-    throw error;
-  }
-};
 
 // Routes
 const rentalCompanyRoutes = require('./routes/rentalCompany.route.js');
@@ -49,48 +21,75 @@ const commentRoutes = require('./routes/commentRoutes.js');
 const likeRoutes = require('./routes/likeRoutes.js');
 const stripeRoute = require('./routes/payment.route.js');
 
-// Route usage
-app.use('/api/users', userRoutes);
-app.use('/api/bookings', bookingRoutes);
-app.use('/api/drivers', driverRoutes);
-app.use('/api/rental-companies', rentalCompanyRoutes);
-app.use('/api/vehicles', vehicleRoutes);
-app.use('/api/auth', authRoute);
-app.use('/api/comment', commentRoutes);
-app.use('/api/likes', likeRoutes);
-app.use('/api/stripe', stripeRoute);
+app.use('/users', userRoutes);
+app.use('/bookings', bookingRoutes);
+app.use('/drivers', driverRoutes);
+app.use('/rental-companies', rentalCompanyRoutes);
+app.use('/vehicles', vehicleRoutes);
+app.use('/auth', authRoute);
+app.use('/comment', commentRoutes);
+app.use('/likes', likeRoutes);
+app.use('/stripe', stripeRoute);
 
-// Health check
-app.get('/api/health', async (req, res) => {
-  await connectDB(); // ensure DB is connected
-  res.status(200).json({ 
-    status: 'healthy',
-    db: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'
-  });
+// Health check route
+app.get('/', (req, res) => {
+  res.send('Server is running!');
 });
 
-// 500 error handler
-app.use((err, req, res, next) => {
-  console.error('❌ Error:', err.stack);
-  res.status(500).json({ error: 'Internal Server Error' });
-});
+// Database connection
+const dbURL = process.env.MONGO_DB_URL;
 
-// 404 handler
-app.use((req, res) => {
-  res.status(404).json({ error: 'Not Found' });
-});
-
-// Local dev server only (Vercel auto-handles production)
-if (!process.env.VERCEL_ENV) {
-  const PORT = process.env.PORT || 3000;
-  connectDB().then(() => {
-    app.listen(PORT, () => {
-      console.log(`🚀 Server running at http://localhost:${PORT}`);
+const connectDB = async () => {
+  try {
+    await mongoose.connect(dbURL, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
     });
-  }).catch((err) => {
-    console.error('❌ Failed to start local server:', err);
-  });
-}
+    console.log('✅ MongoDB Connected Successfully');
+    
+    // After connection, remove problematic index
+  } catch (error) {
+    console.error('❌ MongoDB Connection Failed:', error.message);
+    process.exit(1);
+  }
+};
 
-// Export for Vercel serverless usage
-module.exports = app;
+// async function removeProblematicIndex() {
+//   try {
+//     const collection = mongoose.connection.db.collection('vehicles');
+//     const indexes = await collection.indexes();
+    
+//     // Find and drop the problematic index
+//     const problematicIndex = indexes.find(index => 
+//       index.key?.carImageUrl === 1 || index.key?.carImageUrls === 1
+//     );
+    
+//     if (problematicIndex) {
+//       await collection.dropIndex(problematicIndex.name);
+//       console.log('✅ Successfully dropped problematic index:', problematicIndex.name);
+//     } else {
+//       console.log('ℹ️ No problematic index found');
+//     }
+//   } catch (error) {
+//     console.log('⚠️ Index removal error (may already be dropped):', error.message);
+//   }
+// }
+
+// Export the Vercel handler
+module.exports = async (req, res) => {
+  // Ensure database is connected
+  if (mongoose.connection.readyState === 0) {
+    await connectDB();
+  }
+  
+  // Pass the request to Express
+  app(req, res);
+};
+
+
+// Handle shutdown gracefully
+process.on('SIGINT', async () => {
+  await mongoose.connection.close();
+  console.log('⏏️ MongoDB connection closed due to app termination');
+  process.exit(0);
+});
