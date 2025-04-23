@@ -20,65 +20,95 @@ exports.createUser = async (req, res) => {
       return res.status(400).json({ message: 'Email and password are required' });
     }
 
-    // Check if the user with the same email already exists
+    // Check if user exists
     const existingUser = await User.findOne({ email });
     if (existingUser) {
       return res.status(400).json({ message: 'Email already in use' });
     }
 
-    // Upload images to Cloudinary
-    const cnicFrontUrl = req.files?.cnicFront?.length > 0
-      ? await uploadOnCloudinary(req.files.cnicFront[0].path)
-      : null;
-    const cnicBackUrl = req.files?.cnicBack?.length > 0
-      ? await uploadOnCloudinary(req.files.cnicBack[0].path)
-      : null;
-    const licenseFrontUrl = req.files?.licenseFront?.length > 0
-      ? await uploadOnCloudinary(req.files.licenseFront[0].path)
-      : null;
-    const licenseBackUrl = req.files?.licenseBack?.length > 0
-      ? await uploadOnCloudinary(req.files.licenseBack[0].path)
-      : null;
-      const profilePic = req.files?.profilePic?.length > 0
-      ? await uploadOnCloudinary(req.files.profilePic[0].path)
-      : null;
+    // Helper function to safely upload files
+    const uploadFile = async (file) => {
+      if (!file || file.length === 0) return null;
+      try {
+        const result = await uploadOnCloudinary(file[0].path);
+        return result?.url || null;
+      } catch (error) {
+        console.error(`Error uploading ${file[0].fieldname}:`, error);
+        return null;
+      }
+    };
+
+    // Upload all files in parallel
+    const [
+      cnicFrontUrl,
+      cnicBackUrl,
+      licenseFrontUrl,
+      licenseBackUrl,
+      profilePicUrl
+    ] = await Promise.all([
+      uploadFile(req.files?.cnicFront),
+      uploadFile(req.files?.cnicBack),
+      uploadFile(req.files?.licenseFront),
+      uploadFile(req.files?.licenseBack),
+      uploadFile(req.files?.profilePic)
+    ]);
+
     // Validate required images
-    if (!cnicFrontUrl || !cnicBackUrl || !licenseFrontUrl || !licenseBackUrl || !profilePic) {
-      return res.status(400).json({ message: 'All required images (CNIC & License) must be uploaded' });
+    if (!cnicFrontUrl || !cnicBackUrl || !licenseFrontUrl || !licenseBackUrl || !profilePicUrl) {
+      return res.status(400).json({ 
+        message: 'All required images (CNIC & License) must be uploaded',
+        details: {
+          cnicFront: !!cnicFrontUrl,
+          cnicBack: !!cnicBackUrl,
+          licenseFront: !!licenseFrontUrl,
+          licenseBack: !!licenseBackUrl,
+          profilePic: !!profilePicUrl
+        }
+      });
     }
 
-    // Hash password
+    // Create user
     const hashedPassword = await bcrypt.hash(password, 10);
     const verificationToken = Math.floor(100000 + Math.random() * 900000).toString();
     const normalizedEmail = email.trim().toLowerCase();
 
-    // Create new user
     const user = new User({
       ...userData,
-      email:normalizedEmail,
+      email: normalizedEmail,
       password: hashedPassword,
-      cnicFrontUrl: cnicFrontUrl.url,
-      cnicBackUrl: cnicBackUrl.url,
-      licenseFrontUrl: licenseFrontUrl.url,
-      licenseBackUrl: licenseBackUrl.url,
-      profilePic: profilePic.url,
+      cnicFrontUrl,
+      cnicBackUrl,
+      licenseFrontUrl,
+      licenseBackUrl,
+      profilePic: profilePicUrl,
       verificationToken,
-      verificationTokenExpiresAt: Date.now() + 24 * 60 * 60 * 1000, // 24 hours
+      verificationTokenExpiresAt: Date.now() + 24 * 60 * 60 * 1000,
     });
 
     await user.save();
     generateTokenAndSetCookie(res, user._id);
 
-    // Send verification email
-    await sendVerificationEmail(user.email, verificationToken);
+    // Send verification email (don't await to speed up response)
+    sendVerificationEmail(user.email, verificationToken)
+      .catch(emailError => console.error('Email sending error:', emailError));
 
-    res.status(201).json({ message: 'User created successfully', user: { ...user._doc, password: undefined } });
+    res.status(201).json({ 
+      message: 'User created successfully', 
+      user: { 
+        ...user.toObject(), 
+        password: undefined,
+        verificationToken: undefined
+      } 
+    });
+
   } catch (error) {
     console.error('Error in createUser:', error);
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ 
+      message: 'Server error', 
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+    });
   }
 };
-
 // Get all users
 exports.getAllUsers = async (req, res) => {
   try {
