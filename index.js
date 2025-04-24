@@ -3,20 +3,28 @@ require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
+const cookieParser = require('cookie-parser'); // Add cookie-parser
 
 const app = express();
 
 // Middleware
 app.use(cors({
   origin: (origin, callback) => {
-    // allow requests with no origin (like mobile apps or curl)
+    // Allow requests with no origin (like mobile apps or curl)
     if (!origin) return callback(null, true);
-    return callback(null, origin); // Reflect the origin
+    
+    // You might want to validate specific origins in production
+    // const allowedOrigins = ['https://yourfrontend.com', 'http://localhost:3000'];
+    // if (allowedOrigins.includes(origin)) return callback(null, true);
+    
+    return callback(null, origin); // Reflect the request origin
   },
-  credentials: true
+  credentials: true // This is important for cookies
 }));
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser()); // Add cookie parser middleware
 
 // Routes
 const rentalCompanyRoutes = require('./routes/rentalCompany.route.js');
@@ -40,7 +48,7 @@ app.use('/likes', likeRoutes);
 app.use('/stripe', stripeRoute);
 
 // Database connection
-const dbURL = process.env.MONGO_DB_URL ;
+const dbURL = process.env.MONGO_DB_URL;
 
 const connectDB = async () => {
   try {
@@ -65,12 +73,6 @@ app.use((err, req, res, next) => {
   console.error(err.stack);
   res.status(500).send('Something broke!');
 });
-
-// const PORT = process.env.PORT || 3000;
-// app.listen(PORT, () => {
-//   console.log(`Server is running on port ${PORT}`);
-// });
-
 
 // Export the Express app as a serverless function
 module.exports = app;
