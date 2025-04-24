@@ -1,47 +1,56 @@
-// controllers/likeController.js
-const Like = require("../models/like");
+const Like = require('../models/Like');
+const Vehicle = require('../models/Vehicle');
 
-// Like a Vehicle
+// Like a vehicle
 exports.likeVehicle = async (vehicleId, userId) => {
-  try {
-    const like = new Like({ vehicleId, userId });
-    await like.save();
-    return like;
-  } catch (error) {
-    console.error("Error liking vehicle:", error);
-    throw error;
-  }
-};
-// Get vehicles liked by a user
-exports.getLikedVehiclesByUser = async (userId) => {
-  try {
-    const likedVehicles = await Like.find({ userId }).populate("vehicleId");
-    return likedVehicles.map(like => like.vehicleId);
-  } catch (error) {
-    console.error("Error fetching liked vehicles by user:", error);
-    throw error;
-  }
-};
+    // Check if vehicle exists
+    const vehicle = await Vehicle.findById(vehicleId);
+    if (!vehicle) {
+        throw new Error('Vehicle not found');
+    }
 
+    // Check if already liked
+    const existingLike = await Like.findOne({ vehicleId, userId });
+    if (existingLike) {
+        throw new Error('Vehicle already liked by user');
+    }
+
+    const like = new Like({ vehicleId, userId });
+    return await like.save();
+};
 
 // Unlike a vehicle
-exports.unlikeVehicle = async (vehicleId, userId) => {
-  try {
-    const result = await Like.deleteOne({ vehicleId, userId });
-    return result;
-  } catch (error) {
-    console.error("Error unliking vehicle:", error);
-    throw error;
-  }
+exports.unlikeVehicle = async (req, res) => {
+    try {
+        const { vehicleId, userId } = req.params;
+        const result = await Like.findOneAndDelete({ vehicleId, userId });
+        
+        if (!result) {
+            return res.status(404).json({ message: 'Like not found' });
+        }
+        
+        res.status(200).json({ message: 'Successfully unliked' });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
 };
 
-// Get likes for a vehicle
+// Get likes for a specific vehicle
 exports.getLikes = async (vehicleId) => {
-  try {
-    const likes = await Like.find({ vehicleId }).populate("userId", "username");
-    return likes;
-  } catch (error) {
-    console.error("Error fetching likes:", error);
-    throw error;
-  }
+    return await Like.find({ vehicleId }).populate('userId', 'name email');
+};
+
+// Get liked vehicles by a user
+exports.getLikedVehiclesByUser = async (userId) => {
+    const likes = await Like.find({ userId })
+        .populate('vehicleId')
+        .sort({ timestamp: -1 });
+    
+    return likes.map(like => like.vehicleId);
+};
+
+// Check if a vehicle is liked by a user
+exports.isLikedByUser = async (vehicleId, userId) => {
+    const like = await Like.findOne({ vehicleId, userId });
+    return !!like;
 };
