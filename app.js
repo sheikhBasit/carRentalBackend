@@ -34,15 +34,15 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Routes
-app.use('/users', require('../routes/user.route'));
-app.use('/bookings', require('../routes/booking.route'));
-app.use('/drivers', require('../routes/driver.route'));
-app.use('/rental-companies', require('../routes/rentalCompany.route'));
-app.use('/vehicles', require('../routes/vehicle.route'));
-app.use('/auth', require('../routes/auth.route'));
-app.use('/comment', require('../routes/commentRoutes'));
-app.use('/likes', require('../routes/likeRoutes'));
-app.use('/stripe', require('../routes/payment.route'));
+app.use('/users', require('./routes/user.route'));
+app.use('/bookings', require('./routes/booking.route'));
+app.use('/drivers', require('./routes/driver.route'));
+app.use('/rental-companies', require('./routes/rentalCompany.route'));
+app.use('/vehicles', require('./routes/vehicle.route'));
+app.use('/auth', require('./routes/auth.route'));
+app.use('/comment', require('./routes/commentRoutes'));
+app.use('/likes', require('./routes/likeRoutes'));
+app.use('/stripe', require('./routes/payment.route'));
 
 // Health check
 app.get('/', (req, res) => {

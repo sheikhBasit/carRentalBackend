@@ -1,6 +1,7 @@
 const serverless = require('serverless-http');
 const app = require('./app.js');
 const mongoose = require('mongoose');
+require('dotenv').config();
 
 let isConnected = false;
 

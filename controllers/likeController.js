@@ -1,5 +1,5 @@
-const Like = require('../models/Like');
-const Vehicle = require('../models/Vehicle');
+const Like = require('../models/like');
+const Vehicle = require('../models/vehicle.model');
 
 // Like a vehicle
 exports.likeVehicle = async (vehicleId, userId) => {
