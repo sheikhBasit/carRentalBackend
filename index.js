@@ -4,17 +4,38 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
+
 const app = express();
 
 // Middleware
-app.use(cors({
-  origin: (origin, callback) => {
-    // allow requests with no origin (like mobile apps or curl)
+const corsOptions = {
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
-    return callback(null, origin); // Reflect the origin
+    
+    // Allow all localhost origins and your development frontend port
+    const allowedOrigins = [
+      'http://localhost:3000',  // Typical React dev server
+      'http://localhost:5173',  // Typical Vite dev server
+      'http://127.0.0.1:3000',
+      'http://127.0.0.1:5173',
+      // Add your production domains here when needed:
+      // 'https://your-production-domain.com'
+    ];
+
+    if (process.env.NODE_ENV === 'development' || allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    } else {
+      return callback(new Error('Not allowed by CORS'), false);
+    }
   },
-  credentials: true
-}));
+  credentials: true, // Allow credentials (cookies)
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+};
+
+app.use(cors(corsOptions));
+app.use(cookieParser());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -40,7 +61,7 @@ app.use('/likes', likeRoutes);
 app.use('/stripe', stripeRoute);
 
 // Database connection
-const dbURL = process.env.MONGO_DB_URL ;
+const dbURL = process.env.MONGO_DB_URL;
 
 const connectDB = async () => {
   try {
@@ -66,11 +87,13 @@ app.use((err, req, res, next) => {
   res.status(500).send('Something broke!');
 });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
-});
+// Start server only when not in serverless environment
+if (process.env.NODE_ENV !== 'production' || process.env.IS_SERVERLESS !== 'true') {
+  const PORT = process.env.PORT || 5000;
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+  });
+}
 
-
-// Export the Express app as a serverless function
+// Export the Express app for potential serverless use
 module.exports = app;
