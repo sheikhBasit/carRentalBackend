@@ -1,30 +1,18 @@
-const serverless = require('serverless-http');
-const mongoose = require('mongoose');
-const app = require('./app'); // Adjust path if needed
 require('dotenv').config();
+const app = require('./app');
+const mongoose = require('mongoose');
 
-let isConnected = false;
+const PORT = process.env.PORT || 5000;
 
-const connectDB = async () => {
-  if (isConnected) return;
-
-  try {
-    await mongoose.connect(process.env.MONGO_DB_URL, {
-      useNewUrlParser: true,
-      useUnifiedTopology: true
+// Database connection
+mongoose.connect(process.env.MONGO_DB_URL)
+  .then(() => {
+    console.log('MongoDB connected');
+    app.listen(PORT, () => {
+      console.log(`Server running on port ${PORT}`);
     });
-    isConnected = true;
-    console.log('✅ MongoDB connected');
-  } catch (err) {
-    console.error('❌ MongoDB error:', err);
-    throw err;
-  }
-};
-
-// Wrap the Express app for serverless
-const handler = async (req, res) => {
-  await connectDB();
-  return serverless(app)(req, res);
-};
-
-module.exports = handler;
+  })
+  .catch(err => {
+    console.error('MongoDB connection error:', err);
+    process.exit(1);
+  });
