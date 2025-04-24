@@ -4,11 +4,12 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
+
 const app = express();
 
 // Middleware
 app.use(cors({
-  origin: '*',
+  origin: true, // Reflects request origin
   credentials: true
 }));
 
@@ -37,38 +38,38 @@ app.use('/comment', commentRoutes);
 app.use('/likes', likeRoutes);
 app.use('/stripe', stripeRoute);
 
-// Database connection
-const dbURL = process.env.MONGO_DB_URL ;
-
-const connectDB = async () => {
-  try {
-    await mongoose.connect(dbURL);
-    console.log('MongoDB connected successfully');
-  } catch (error) {
-    console.error('MongoDB connection error:', error);
-    process.exit(1);
-  }
-};
-
-// Call connectDB function
-connectDB();
-
 // Health check
 app.get('/', (req, res) => {
   res.send('Server is running!');
 });
 
-// Error handling middleware
+// Error handler
 app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).send('Something broke!');
+  console.error('Server Error:', err.stack);
+  res.status(500).json({ message: 'Internal Server Error' });
 });
 
-// const PORT = process.env.PORT || 3000;
-// app.listen(PORT, () => {
-//   console.log(`Server is running on port ${PORT}`);
-// });
+// MongoDB connection (optimized for serverless)
+let isConnected = false;
 
+const connectDB = async () => {
+  if (isConnected) return;
 
-// Export the Express app as a serverless function
-module.exports = app;
+  try {
+    await mongoose.connect(process.env.MONGO_DB_URL, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true
+    });
+    isConnected = true;
+    console.log('MongoDB connected successfully');
+  } catch (error) {
+    console.error('MongoDB connection error:', error);
+    throw error;
+  }
+};
+
+// Export serverless function handler
+module.exports = async (req, res) => {
+  await connectDB();
+  return app(req, res);
+};
