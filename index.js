@@ -88,12 +88,12 @@ app.use((err, req, res, next) => {
 });
 
 // Start server only when not in serverless environment
-if (process.env.NODE_ENV !== 'production' || process.env.IS_SERVERLESS !== 'true') {
-  const PORT = process.env.PORT || 5000;
-  app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-  });
-}
+// if (process.env.NODE_ENV !== 'production' || process.env.IS_SERVERLESS !== 'true') {
+//   const PORT = process.env.PORT || 5000;
+//   app.listen(PORT, () => {
+//     console.log(`Server running on port ${PORT}`);
+//   });
+// }
 
 // Export the Express app for potential serverless use
 module.exports = app;
