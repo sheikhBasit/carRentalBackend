@@ -1,18 +1,76 @@
 require('dotenv').config();
-const app = require('./app');
-const mongoose = require('mongoose');
 
-const PORT = process.env.PORT || 5000;
+const express = require('express');
+const mongoose = require('mongoose');
+const cors = require('cors');
+
+const app = express();
+
+// Middleware
+app.use(cors({
+  origin: (origin, callback) => {
+    // allow requests with no origin (like mobile apps or curl)
+    if (!origin) return callback(null, true);
+    return callback(null, origin); // Reflect the origin
+  },
+  credentials: true
+}));
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// Routes
+const rentalCompanyRoutes = require('./routes/rentalCompany.route.js');
+const vehicleRoutes = require('./routes/vehicle.route.js');
+const userRoutes = require('./routes/user.route.js');
+const bookingRoutes = require('./routes/booking.route.js');
+const driverRoutes = require('./routes/driver.route.js');
+const authRoute = require('./routes/auth.route.js');
+const commentRoutes = require('./routes/commentRoutes.js');
+const likeRoutes = require('./routes/likeRoutes.js');
+const stripeRoute = require('./routes/payment.route.js');
+
+app.use('/users', userRoutes);
+app.use('/bookings', bookingRoutes);
+app.use('/drivers', driverRoutes);
+app.use('/rental-companies', rentalCompanyRoutes);
+app.use('/vehicles', vehicleRoutes);
+app.use('/auth', authRoute);
+app.use('/comment', commentRoutes);
+app.use('/likes', likeRoutes);
+app.use('/stripe', stripeRoute);
 
 // Database connection
-mongoose.connect(process.env.MONGO_DB_URL)
-  .then(() => {
-    console.log('MongoDB connected');
-    app.listen(PORT, () => {
-      console.log(`Server running on port ${PORT}`);
-    });
-  })
-  .catch(err => {
-    console.error('MongoDB connection error:', err);
+const dbURL = process.env.MONGO_DB_URL ;
+
+const connectDB = async () => {
+  try {
+    await mongoose.connect(dbURL);
+    console.log('MongoDB connected successfully');
+  } catch (error) {
+    console.error('MongoDB connection error:', error);
     process.exit(1);
-  });
+  }
+};
+
+// Call connectDB function
+connectDB();
+
+// Health check
+app.get('/', (req, res) => {
+  res.send('Server is running!');
+});
+
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).send('Something broke!');
+});
+
+// const PORT = process.env.PORT || 3000;
+// app.listen(PORT, () => {
+//   console.log(`Server is running on port ${PORT}`);
+// });
+
+
+// Export the Express app as a serverless function
+module.exports = app;
