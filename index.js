@@ -1,6 +1,6 @@
 const serverless = require('serverless-http');
-const app = require('./app.js');
 const mongoose = require('mongoose');
+const app = require('./app'); // Adjust path if needed
 require('dotenv').config();
 
 let isConnected = false;
@@ -9,20 +9,22 @@ const connectDB = async () => {
   if (isConnected) return;
 
   try {
-    await mongoose.connect(process.env.MONGO_DB_URL);
+    await mongoose.connect(process.env.MONGO_DB_URL, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true
+    });
     isConnected = true;
-    console.log('MongoDB connected');
-  } catch (error) {
-    console.error('MongoDB connection error:', error);
-    throw error;
+    console.log('✅ MongoDB connected');
+  } catch (err) {
+    console.error('❌ MongoDB error:', err);
+    throw err;
   }
 };
 
-// Middleware to connect DB before any request
+// Wrap the Express app for serverless
 const handler = async (req, res) => {
   await connectDB();
-  const expressHandler = serverless(app);
-  return expressHandler(req, res);
+  return serverless(app)(req, res);
 };
 
 module.exports = handler;
