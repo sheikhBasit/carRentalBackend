@@ -9,7 +9,8 @@ const {
   sendResetSuccessEmail,
 } = require('../mailtrap/email.js');
 const generateTokenAndSetCookie = require('../utils/generateTokenAndSetCookie.js');
-// Create a new user with only profile picture upload
+
+// Create a new user
 exports.createUser = async (req, res) => {
   try {
     const { email, password, ...userData } = req.body;
@@ -25,22 +26,48 @@ exports.createUser = async (req, res) => {
       return res.status(400).json({ message: 'Email already in use' });
     }
 
-    // Helper function to safely upload profile picture
-    const uploadProfilePic = async (file) => {
+    // Helper function to safely upload files
+    const uploadFile = async (file) => {
       if (!file || file.length === 0) return null;
       try {
         const result = await uploadOnCloudinary(file[0].path);
         return result?.url || null;
       } catch (error) {
-        console.error('Error uploading profile picture:', error);
+        console.error(`Error uploading ${file[0].fieldname}:`, error);
         return null;
       }
     };
 
-    // Upload only profile picture
-    const profilePicUrl = await uploadProfilePic(req.files?.profilePic);
+    // Upload all files in parallel
+    const [
+      cnicFrontUrl,
+      cnicBackUrl,
+      licenseFrontUrl,
+      licenseBackUrl,
+      profilePicUrl
+    ] = await Promise.all([
+      uploadFile(req.files?.cnicFront),
+      uploadFile(req.files?.cnicBack),
+      uploadFile(req.files?.licenseFront),
+      uploadFile(req.files?.licenseBack),
+      uploadFile(req.files?.profilePic)
+    ]);
 
-    // Create user (profile picture is optional)
+    // Validate required images
+    if (!cnicFrontUrl || !cnicBackUrl || !licenseFrontUrl || !licenseBackUrl || !profilePicUrl) {
+      return res.status(400).json({ 
+        message: 'All required images (CNIC & License) must be uploaded',
+        details: {
+          cnicFront: !!cnicFrontUrl,
+          cnicBack: !!cnicBackUrl,
+          licenseFront: !!licenseFrontUrl,
+          licenseBack: !!licenseBackUrl,
+          profilePic: !!profilePicUrl
+        }
+      });
+    }
+
+    // Create user
     const hashedPassword = await bcrypt.hash(password, 10);
     const verificationToken = Math.floor(100000 + Math.random() * 900000).toString();
     const normalizedEmail = email.trim().toLowerCase();
@@ -49,7 +76,11 @@ exports.createUser = async (req, res) => {
       ...userData,
       email: normalizedEmail,
       password: hashedPassword,
-      profilePic: profilePicUrl || undefined, // Set to undefined if no picture
+      cnicFrontUrl,
+      cnicBackUrl,
+      licenseFrontUrl,
+      licenseBackUrl,
+      profilePic: profilePicUrl,
       verificationToken,
       verificationTokenExpiresAt: Date.now() + 24 * 60 * 60 * 1000,
     });
@@ -78,105 +109,6 @@ exports.createUser = async (req, res) => {
     });
   }
 };
-// // Create a new user
-// exports.createUser = async (req, res) => {
-//   try {
-//     const { email, password, ...userData } = req.body;
-
-//     // Validate required fields
-//     if (!email || !password) {
-//       return res.status(400).json({ message: 'Email and password are required' });
-//     }
-
-//     // Check if user exists
-//     const existingUser = await User.findOne({ email });
-//     if (existingUser) {
-//       return res.status(400).json({ message: 'Email already in use' });
-//     }
-
-//     // Helper function to safely upload files
-//     const uploadFile = async (file) => {
-//       if (!file || file.length === 0) return null;
-//       try {
-//         const result = await uploadOnCloudinary(file[0].path);
-//         return result?.url || null;
-//       } catch (error) {
-//         console.error(`Error uploading ${file[0].fieldname}:`, error);
-//         return null;
-//       }
-//     };
-
-//     // Upload all files in parallel
-//     const [
-//       // cnicFrontUrl,
-//       // cnicBackUrl,
-//       // licenseFrontUrl,
-//       // licenseBackUrl,
-//       profilePicUrl
-//     ] = await Promise.all([
-//       // uploadFile(req.files?.cnicFront),
-//       // uploadFile(req.files?.cnicBack),
-//       // uploadFile(req.files?.licenseFront),
-//       // uploadFile(req.files?.licenseBack),
-//       uploadFile(req.files?.profilePic)
-//     ]);
-
-//     // Validate required images
-//     if (!cnicFrontUrl || !cnicBackUrl || !licenseFrontUrl || !licenseBackUrl || !profilePicUrl) {
-//       return res.status(400).json({ 
-//         message: 'All required images (CNIC & License) must be uploaded',
-//         details: {
-//           // cnicFront: !!cnicFrontUrl,
-//           // cnicBack: !!cnicBackUrl,
-//           // licenseFront: !!licenseFrontUrl,
-//           // licenseBack: !!licenseBackUrl,
-//           profilePic: !!profilePicUrl
-//         }
-//       });
-//     }
-
-//     // Create user
-//     const hashedPassword = await bcrypt.hash(password, 10);
-//     const verificationToken = Math.floor(100000 + Math.random() * 900000).toString();
-//     const normalizedEmail = email.trim().toLowerCase();
-
-//     const user = new User({
-//       ...userData,
-//       email: normalizedEmail,
-//       password: hashedPassword,
-//       cnicFrontUrl,
-//       cnicBackUrl,
-//       licenseFrontUrl,
-//       licenseBackUrl,
-//       profilePic: profilePicUrl,
-//       verificationToken,
-//       verificationTokenExpiresAt: Date.now() + 24 * 60 * 60 * 1000,
-//     });
-
-//     await user.save();
-//     generateTokenAndSetCookie(res, user._id);
-
-//     // Send verification email (don't await to speed up response)
-//     sendVerificationEmail(user.email, verificationToken)
-//       .catch(emailError => console.error('Email sending error:', emailError));
-
-//     res.status(201).json({ 
-//       message: 'User created successfully', 
-//       user: { 
-//         ...user.toObject(), 
-//         password: undefined,
-//         verificationToken: undefined
-//       } 
-//     });
-
-//   } catch (error) {
-//     console.error('Error in createUser:', error);
-//     res.status(500).json({ 
-//       message: 'Server error', 
-//       error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
-//     });
-//   }
-// };
 // Get all users
 exports.getAllUsers = async (req, res) => {
   try {

@@ -78,6 +78,12 @@ app.use((err, req, res, next) => {
   res.status(status).json({ success: false, error: message });
 });
 
+// Server listening (for local development)
+// const PORT = process.env.PORT || 5000;
+// app.listen(PORT, () => {
+//   console.log(`Server running on port ${PORT}`);
+// });
+
 
 // Export the Express app as a serverless function
 module.exports = app;
