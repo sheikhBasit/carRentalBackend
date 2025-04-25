@@ -68,11 +68,16 @@ app.get('/', (req, res) => {
   res.send('Server is running!');
 });
 
-// Error handling middleware
+// Global error handler (place at the end)
 app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).send('Something broke!',err.stack);
+  console.error('Error:', err);
+
+  const status = typeof err.status === 'number' ? err.status : 500;
+  const message = err.message || 'Internal Server Error';
+
+  res.status(status).json({ success: false, error: message });
 });
+
 
 // Export the Express app as a serverless function
 module.exports = app;
