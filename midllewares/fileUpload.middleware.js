@@ -14,13 +14,12 @@ const upload = multer({
   storage,
   limits: { fileSize: 5 * 1024 * 1024 }, // 5MB file limit
   fileFilter: function (req, file, cb) {
-    const allowedTypes = ["image/jpeg", "image/png", "image/jpg"];
+    const allowedTypes = ["image/jpeg", "image/png"]; // Removed "image/jpg"
     if (allowedTypes.includes(file.mimetype)) {
       cb(null, true);
     } else {
-      cb(new Error("Invalid file type"), false);
+      cb(new Error("Invalid file type. Only JPEG and PNG files are allowed"), false);
     }
   }
 });
-
 module.exports = upload;
