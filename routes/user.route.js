@@ -45,15 +45,15 @@ router.post(
       });
 
       // Debugging 4: Verify temp directory exists (if using disk storage)
-      if (upload.storage === multer.diskStorage) {
-        const tempDir = './public/temp';
-        try {
-          const files = fs.readdirSync(tempDir);
-          console.log(`Temp directory (${tempDir}) contains:`, files);
-        } catch (err) {
-          console.error(`Temp directory error: ${err.message}`);
-        }
-      }
+      // if (upload.storage === multer.diskStorage) {
+      //   const tempDir = './public/temp';
+      //   try {
+      //     const files = fs.readdirSync(tempDir);
+      //     console.log(`Temp directory (${tempDir}) contains:`, files);
+      //   } catch (err) {
+      //     console.error(`Temp directory error: ${err.message}`);
+      //   }
+      // }
 
       console.log('===== UPLOAD DEBUG END =====');
       
