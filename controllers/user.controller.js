@@ -27,10 +27,27 @@ exports.createUser = async (req, res) => {
     }
 
     // Helper function to safely upload files
+    // const uploadFile = async (file) => {
+    //   if (!file || file.length === 0) return null;
+    //   try {
+    //     const result = await uploadOnCloudinary(file[0].path);
+    //     return result?.url || null;
+    //   } catch (error) {
+    //     console.error(`Error uploading ${file[0].fieldname}:`, error);
+    //     return null;
+    //   }
+    // };
     const uploadFile = async (file) => {
       if (!file || file.length === 0) return null;
       try {
-        const result = await uploadOnCloudinary(file[0].path);
+        // Convert buffer to base64 for Cloudinary
+        const base64String = file[0].buffer.toString('base64');
+        const dataUri = `data:${file[0].mimetype};base64,${base64String}`;
+        
+        const result = await uploadOnCloudinary(dataUri, {
+          folder: "user_documents",
+          resource_type: "auto"
+        });
         return result?.url || null;
       } catch (error) {
         console.error(`Error uploading ${file[0].fieldname}:`, error);
