@@ -15,8 +15,8 @@ const userSchema = new mongoose.Schema({
   licenseFrontUrl: { type: String, required: false },
   licenseBackUrl: { type: String, required: false },
   cnic: { type: String, required: true, unique: true },
-  cnicFrontUrl: { type: String, required: true },
-  cnicBackUrl: { type: String, required: true },
+  cnicFrontUrl: { type: String, required: false },
+  cnicBackUrl: { type: String, required: false },
   lastLogin:{
     type: Date,
     default: Date.now

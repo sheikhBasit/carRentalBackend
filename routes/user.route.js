@@ -6,10 +6,10 @@ const upload = require('../midllewares/fileUpload.middleware.js');
 // Create a new user (with file upload)
 router.post('/create', (req, res) => {
   upload.fields([
-    { name: "cnicFront", maxCount: 1 },
-    { name: "cnicBack", maxCount: 1 },
-    { name: "licenseFront", maxCount: 1 },
-    { name: "licenseBack", maxCount: 1 },
+    // { name: "cnicFront", maxCount: 1 },
+    // { name: "cnicBack", maxCount: 1 },
+    // { name: "licenseFront", maxCount: 1 },
+    // { name: "licenseBack", maxCount: 1 },
     { name: "profilePic", maxCount: 1 },
 
   ]),(req, res, function(err) {

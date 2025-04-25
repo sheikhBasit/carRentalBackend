@@ -9,39 +9,67 @@ cloudinary.config({
 });
 
 const uploadOnCloudinary = async (localFilePath) => {
-    try {
-      // 1. Add early timeout check
-      const startTime = Date.now();
-      const MAX_UPLOAD_TIME = 10000; // 10 seconds
-  
-      // 2. Stream upload instead of full file upload
-      const uploadStream = cloudinary.uploader.upload_stream(
-        { resource_type: "auto" },
-        (error, result) => {
-          if (error) {
-            console.error('Upload error:', error);
-            return { success: false, error: error.message };
-          }
-          return { success: true, url: result.secure_url };
-        }
-      );
-  
-      // 3. Pipe file stream to Cloudinary
-      fs.createReadStream(localFilePath)
-        .on('error', (err) => {
-          console.error('File read error:', err);
-          return { success: false, error: 'File read failed' };
-        })
-        .pipe(uploadStream);
-  
-      // 4. Add timeout check
-      if (Date.now() - startTime > MAX_UPLOAD_TIME) {
-        throw new Error('Upload timed out');
-      }
-  
-    } catch (error) {
-      console.error('Upload failed:', error);
-      return { success: false, error: error.message };
+    // Early return for missing path
+    if (!localFilePath) {
+        return { success: false, error: "No file path provided" };
     }
-  };
+
+    // Validate file extension
+    const ext = path.extname(localFilePath).toLowerCase();
+    if (!['.jpg', '.jpeg', '.png'].includes(ext)) {
+        try {
+            if (fs.existsSync(localFilePath)) {
+                fs.unlinkSync(localFilePath);
+            }
+        } catch (cleanupError) {
+            console.error('Error cleaning up invalid file:', cleanupError);
+        }
+        return { success: false, error: "Invalid file type. Only JPG/JPEG/PNG allowed" };
+    }
+
+    // Verify file exists
+    if (!fs.existsSync(localFilePath)) {
+        return { success: false, error: "File not found" };
+    }
+
+    try {
+        // Upload with additional validation
+        const response = await cloudinary.uploader.upload(localFilePath, {
+            resource_type: "auto",
+            invalidate: true // Optional: force CDN cache refresh
+        });
+
+        // Clean up local file
+        try {
+            fs.unlinkSync(localFilePath);
+        } catch (unlinkError) {
+            console.warn('Could not delete temp file:', unlinkError.message);
+        }
+
+        return {
+            success: true,
+            url: response.secure_url, // Always use HTTPS
+            public_id: response.public_id,
+            format: response.format
+        };
+
+    } catch (error) {
+        console.error('Cloudinary upload error:', error);
+        
+        // Clean up local file on error
+        try {
+            if (fs.existsSync(localFilePath)) {
+                fs.unlinkSync(localFilePath);
+            }
+        } catch (cleanupError) {
+            console.error('Error cleaning up after failed upload:', cleanupError);
+        }
+
+        return {
+            success: false,
+            error: error.message || "Failed to upload to Cloudinary"
+        };
+    }
+};
+
 module.exports = { uploadOnCloudinary };
