@@ -5,7 +5,10 @@ const cors = require('cors');
 const cookieParser = require('cookie-parser');
 
 const app = express();
-// ====================== FINAL CORS CONFIGURATION ======================
+
+// Middleware
+
+// ====================== CORS CONFIGURATION ======================
 const ALLOWED_ORIGINS = [
   'http://localhost:5173',          // Vite dev server
   'http://localhost:3000',          // Create-React-App
@@ -18,20 +21,27 @@ const ALLOWED_ORIGINS = [
 ];
 
 const CORS_OPTIONS = {
-  origin: (origin, callback) => {
+  origin: function (origin, callback) {
     // Allow requests with no origin (mobile apps, Postman, etc.)
     if (!origin) return callback(null, true);
     
     // Check against allowed origins
-    const isAllowed = ALLOWED_ORIGINS.some(allowed => 
-      typeof allowed === 'string' 
-        ? allowed === origin 
-        : allowed.test(origin)
-    );
+    const isAllowed = ALLOWED_ORIGINS.some(allowed => {
+      if (typeof allowed === 'string') {
+        return allowed === origin;
+      } else if (allowed instanceof RegExp) {
+        return allowed.test(origin);
+      }
+      return false;
+    });
 
-    isAllowed 
-      ? callback(null, origin) // Reflect the exact origin back
-      : callback(new Error(`Origin '${origin}' not allowed`));
+    if (isAllowed) {
+      // Reflect the request origin in the CORS header
+      return callback(null, origin);
+    } else {
+      console.warn(`Blocked request from origin: ${origin}`);
+      return callback(new Error(`Origin '${origin}' not allowed`));
+    }
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -39,10 +49,13 @@ const CORS_OPTIONS = {
   maxAge: 86400
 };
 
+// Apply CORS middleware
 app.use(cors(CORS_OPTIONS));
+
+// Handle preflight requests
 app.options('*', cors(CORS_OPTIONS));
-// ======================================================================
-// Middleware
+
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
