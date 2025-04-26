@@ -5,41 +5,32 @@ const cors = require('cors');
 const cookieParser = require('cookie-parser');
 
 const app = express();
-// ====================== UPDATED CORS CONFIGURATION ======================
-const DEV_ORIGINS = [
+// ====================== FINAL CORS CONFIGURATION ======================
+const ALLOWED_ORIGINS = [
   'http://localhost:5173',          // Vite dev server
   'http://localhost:3000',          // Create-React-App
   'capacitor://localhost',          // Capacitor mobile
   'http://10.0.2.2',                // Android emulator
   'exp://192.168.x.x:19000',        // Expo dev
   /\.ngrok\.io$/,                   // ngrok tunnels
-];
-
-const PROD_ORIGINS = [
-  'https://your-production-web.com',
-  'https://your-production-app.com',
-  'ionic://your.app.package'        // Your mobile app bundle ID
+  'https://your-production-web.com', // Production web
+  'https://your-mobile-app.com'     // Production mobile
 ];
 
 const CORS_OPTIONS = {
   origin: (origin, callback) => {
-    // 1. Allow requests with no origin (mobile apps, Postman, etc.)
+    // Allow requests with no origin (mobile apps, Postman, etc.)
     if (!origin) return callback(null, true);
     
-    // 2. Check against whitelist
-    const allowedOrigins = [
-      ...(process.env.NODE_ENV === 'production' ? PROD_ORIGINS : DEV_ORIGINS),
-      ...(process.env.EXTRA_ORIGINS?.split(',') || [])
-    ];
-
-    const isAllowed = allowedOrigins.some(allowed => 
+    // Check against allowed origins
+    const isAllowed = ALLOWED_ORIGINS.some(allowed => 
       typeof allowed === 'string' 
         ? allowed === origin 
-        : allowed.test?.(origin)
+        : allowed.test(origin)
     );
 
     isAllowed 
-      ? callback(null, true)
+      ? callback(null, origin) // Reflect the exact origin back
       : callback(new Error(`Origin '${origin}' not allowed`));
   },
   credentials: true,
@@ -49,9 +40,8 @@ const CORS_OPTIONS = {
 };
 
 app.use(cors(CORS_OPTIONS));
-app.options('*', cors(CORS_OPTIONS)); // Enable preflight for all routes
-// ========================================================================
-
+app.options('*', cors(CORS_OPTIONS));
+// ======================================================================
 // Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
