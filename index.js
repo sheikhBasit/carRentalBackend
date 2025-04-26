@@ -3,7 +3,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
-const multer = require('multer'); // already imported
+const multer = require('multer');
 
 const app = express();
 
@@ -19,13 +19,10 @@ const allowedOrigins = [
   'https://your-mobile-app.com'
 ];
 
-// Update your CORS configuration
 const corsOptions = {
   origin: (origin, callback) => {
-    // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
     
-    // Check against allowed origins
     const isAllowed = allowedOrigins.some(allowed => {
       if (typeof allowed === 'string') return allowed === origin;
       if (allowed instanceof RegExp) return allowed.test(origin);
@@ -33,7 +30,6 @@ const corsOptions = {
     });
 
     if (isAllowed || process.env.NODE_ENV === 'development') {
-      // Important: Set the Vary header to avoid cache issues
       callback(null, true);
     } else {
       console.warn(`Blocked CORS request from origin: ${origin}`);
@@ -42,38 +38,13 @@ const corsOptions = {
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: [
-    'Content-Type', 
-    'Authorization', 
-    'X-Requested-With',
-    'Accept',
-    'Origin'
-  ],
-  exposedHeaders: ['Content-Length', 'X-Foo', 'X-Bar'],
-  optionsSuccessStatus: 200,
-  maxAge: 86400 // 24 hours
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
+  optionsSuccessStatus: 200
 };
-
-app.use((req, res, next) => {
-  const origin = req.headers.origin;
-  if (allowedOrigins.includes(origin)) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
-    res.setHeader('Access-Control-Allow-Credentials', 'true');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
-  }
-  
-  // Handle preflight requests
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
-  
-  next();
-});
 
 // ====================== Middleware ======================
 app.use(cors(corsOptions));
-app.options('*', cors(corsOptions)); // Preflight handling
+app.options('*', cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
@@ -105,9 +76,9 @@ app.get('/', (req, res) => {
 });
 
 app.get('/test-cors', (req, res) => {
-  res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
   res.json({ message: "CORS test successful", headers: req.headers });
 });
+
 // ====================== Database connection ======================
 const dbURL = process.env.MONGO_DB_URL;
 const connectDB = async () => {
@@ -122,8 +93,6 @@ const connectDB = async () => {
 connectDB();
 
 // ====================== Error Handling ======================
-
-// Multer-specific error handler
 app.use((err, req, res, next) => {
   if (err instanceof multer.MulterError) {
     console.error('Multer error:', err);
@@ -132,12 +101,18 @@ app.use((err, req, res, next) => {
       error: err.message || 'File upload error',
     });
   }
-  next(err); // pass to next error handler
+  next(err);
 });
 
-// General error handler
 app.use((err, req, res, next) => {
   console.error('General Error:', err);
+
+  // Set CORS headers
+  const origin = req.headers.origin;
+  if (allowedOrigins.some(o => typeof o === 'string' ? o === origin : o.test(origin))) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+  }
 
   if (err.message.includes('CORS') || err.message.includes('Origin')) {
     return res.status(403).json({ 
