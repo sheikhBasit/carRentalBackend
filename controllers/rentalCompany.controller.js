@@ -88,15 +88,11 @@ exports.createRentalCompany = async (req, res) => {
       });
     }
 
-    // Upload files to Cloudinary
+    // Upload files to Cloudinary using buffers (consistent with user signup)
     const uploadFile = async (file) => {
       try {
-        // Ensure file exists and has path property
-        if (!file || !file[0] || !file[0].path) {
-          throw new Error('Invalid file upload');
-        }
-        
-        const result = await uploadOnCloudinary(file[0].path);
+        if (!file || file.length === 0) return null;
+        const result = await uploadOnCloudinary(file[0].buffer); // Use buffer instead of path
         if (!result?.url) throw new Error('Failed to upload file to Cloudinary');
         return result.url;
       } catch (error) {
@@ -120,7 +116,7 @@ exports.createRentalCompany = async (req, res) => {
       password: hashedPassword,
       cnicFrontUrl,
       cnicBackUrl,
-      isVerified: false // Add verification status
+      isVerified: false
     });
 
     await rentalCompany.save();
@@ -139,7 +135,6 @@ exports.createRentalCompany = async (req, res) => {
   } catch (error) {
     console.error("Error creating rental company:", error);
     
-    // Determine appropriate status code
     let statusCode = 500;
     if (error.name === 'ValidationError') statusCode = 400;
     if (error.message.includes('duplicate key')) statusCode = 409;
