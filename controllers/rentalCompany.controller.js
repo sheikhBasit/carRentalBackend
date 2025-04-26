@@ -49,6 +49,10 @@ const { uploadOnCloudinary } = require('../utils/connectCloudinary.js'); // Ensu
 //     return res.status(500).json({ error: error.message });
 //   }
 // };
+const RentalCompany = require('../models/rentalCompany.model');
+const bcrypt = require('bcrypt');
+const { uploadOnCloudinary } = require('../utils/cloudinary');
+
 exports.createRentalCompany = async (req, res) => {
   try {
     console.log("Incoming request headers:", req.headers);
@@ -56,7 +60,7 @@ exports.createRentalCompany = async (req, res) => {
     console.log("Request files:", req.files);
 
     // Validate required fields
-    const requiredFields = ['email', 'password', 'city', 'companyName'];
+    const requiredFields = ['email', 'password', 'city', 'companyName', 'phNum', 'cnic', 'address', 'province'];
     const missingFields = requiredFields.filter(field => !req.body[field]);
     
     if (missingFields.length > 0) {
@@ -87,11 +91,16 @@ exports.createRentalCompany = async (req, res) => {
       });
     }
 
-    // Upload files
+    // Upload files to Cloudinary
     const uploadFile = async (file) => {
       try {
+        // Ensure file exists and has path property
+        if (!file || !file[0] || !file[0].path) {
+          throw new Error('Invalid file upload');
+        }
+        
         const result = await uploadOnCloudinary(file[0].path);
-        if (!result?.url) throw new Error('Failed to upload file');
+        if (!result?.url) throw new Error('Failed to upload file to Cloudinary');
         return result.url;
       } catch (error) {
         console.error('File upload error:', error);
@@ -113,7 +122,8 @@ exports.createRentalCompany = async (req, res) => {
       email: normalizedEmail,
       password: hashedPassword,
       cnicFrontUrl,
-      cnicBackUrl
+      cnicBackUrl,
+      isVerified: false // Add verification status
     });
 
     await rentalCompany.save();
@@ -121,6 +131,7 @@ exports.createRentalCompany = async (req, res) => {
     // Remove sensitive data from response
     const companyResponse = rentalCompany.toObject();
     delete companyResponse.password;
+    delete companyResponse.__v;
 
     res.status(201).json({
       success: true,
@@ -132,12 +143,16 @@ exports.createRentalCompany = async (req, res) => {
     console.error("Error creating rental company:", error);
     
     // Determine appropriate status code
-    const statusCode = error.name === 'ValidationError' ? 400 : 500;
+    let statusCode = 500;
+    if (error.name === 'ValidationError') statusCode = 400;
+    if (error.message.includes('duplicate key')) statusCode = 409;
     
     res.status(statusCode).json({
       success: false,
-      error: error.message || 'Internal server error',
-      ...(process.env.NODE_ENV === 'development' && { stack: error.stack })
+      error: process.env.NODE_ENV === 'production' 
+        ? 'An error occurred during registration' 
+        : error.message,
+      ...(process.env.NODE_ENV !== 'production' && { stack: error.stack })
     });
   }
 };
