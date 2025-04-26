@@ -1,30 +1,62 @@
 require('dotenv').config();
-
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
-const cookieParser = require('cookie-parser'); // Add cookie-parser
+const cookieParser = require('cookie-parser');
 
 const app = express();
 
-// Middleware
-app.use(cors({
+// ====================== ENHANCED CORS CONFIGURATION ======================
+const DEV_ORIGINS = [
+  'http://localhost:5173',          // Vite dev server
+  'http://localhost:3000',          // Create-React-App
+  'capacitor://localhost',          // Capacitor mobile
+  'http://10.0.2.2',                // Android emulator
+  'exp://192.168.x.x:19000',        // Expo dev
+  /\.ngrok\.io$/,                   // ngrok tunnels
+];
+
+const PROD_ORIGINS = [
+  'https://your-production-web.com',
+  'https://your-mobile-app.com',
+  'ionic://your.app.package'        // Your mobile app bundle ID
+];
+
+const CORS_OPTIONS = {
   origin: (origin, callback) => {
-    // Allow requests with no origin (like mobile apps or curl)
+    // 1. Allow requests with no origin (mobile apps, Postman, etc.)
     if (!origin) return callback(null, true);
     
-    // You might want to validate specific origins in production
-    // const allowedOrigins = ['https://yourfrontend.com', 'http://localhost:3000'];
-    // if (allowedOrigins.includes(origin)) return callback(null, true);
-    
-    return callback(null, origin); // Reflect the request origin
-  },
-  credentials: true // This is important for cookies
-}));
+    // 2. Check against whitelist
+    const allowedOrigins = [
+      ...(process.env.NODE_ENV === 'production' ? PROD_ORIGINS : DEV_ORIGINS),
+      ...(process.env.EXTRA_ORIGINS?.split(',') || []) // Optional env override
+    ];
 
+    const isAllowed = allowedOrigins.some(allowed => 
+      typeof allowed === 'string' 
+        ? allowed === origin 
+        : allowed.test?.(origin)
+    );
+
+    isAllowed 
+      ? callback(null, true)
+      : callback(new Error(`Origin '${origin}' not allowed. Register at ${process.env.API_DOCS_URL || 'your-contact-page'}`));
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  maxAge: 86400 // Cache preflight for 24h
+};
+
+app.use(cors(CORS_OPTIONS));
+app.options('*', cors(CORS_OPTIONS)); // Enable preflight for all routes
+// ========================================================================
+
+// Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(cookieParser()); // Add cookie parser middleware
+app.use(cookieParser());
 
 // Routes
 const rentalCompanyRoutes = require('./routes/rentalCompany.route.js');
@@ -60,7 +92,6 @@ const connectDB = async () => {
   }
 };
 
-// Call connectDB function
 connectDB();
 
 // Health check
@@ -68,22 +99,28 @@ app.get('/', (req, res) => {
   res.send('Server is running!');
 });
 
-// Global error handler (place at the end)
+// Enhanced error handling
 app.use((err, req, res, next) => {
   console.error('Error:', err);
+  
+  // Handle CORS errors specifically
+  if (err.message.includes('CORS') || err.message.includes('Origin')) {
+    return res.status(403).json({ 
+      success: false, 
+      error: err.message,
+      docs: process.env.API_DOCS_URL || 'https://your-api-docs.com'
+    });
+  }
 
-  const status = typeof err.status === 'number' ? err.status : 500;
+  // Handle other errors
+  const status = err.statusCode || 500;
   const message = err.message || 'Internal Server Error';
-
-  res.status(status).json({ success: false, error: message });
+  
+  res.status(status).json({ 
+    success: false, 
+    error: message,
+    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
+  });
 });
 
-// Server listening (for local development)
-// const PORT = process.env.PORT || 5000;
-// app.listen(PORT, () => {
-//   console.log(`Server running on port ${PORT}`);
-// });
-
-
-// Export the Express app as a serverless function
 module.exports = app;
