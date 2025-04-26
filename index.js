@@ -5,8 +5,7 @@ const cors = require('cors');
 const cookieParser = require('cookie-parser');
 
 const app = express();
-
-// ====================== ENHANCED CORS CONFIGURATION ======================
+// ====================== UPDATED CORS CONFIGURATION ======================
 const DEV_ORIGINS = [
   'http://localhost:5173',          // Vite dev server
   'http://localhost:3000',          // Create-React-App
@@ -18,7 +17,7 @@ const DEV_ORIGINS = [
 
 const PROD_ORIGINS = [
   'https://your-production-web.com',
-  'https://your-mobile-app.com',
+  'https://your-production-app.com',
   'ionic://your.app.package'        // Your mobile app bundle ID
 ];
 
@@ -30,7 +29,7 @@ const CORS_OPTIONS = {
     // 2. Check against whitelist
     const allowedOrigins = [
       ...(process.env.NODE_ENV === 'production' ? PROD_ORIGINS : DEV_ORIGINS),
-      ...(process.env.EXTRA_ORIGINS?.split(',') || []) // Optional env override
+      ...(process.env.EXTRA_ORIGINS?.split(',') || [])
     ];
 
     const isAllowed = allowedOrigins.some(allowed => 
@@ -41,12 +40,12 @@ const CORS_OPTIONS = {
 
     isAllowed 
       ? callback(null, true)
-      : callback(new Error(`Origin '${origin}' not allowed. Register at ${process.env.API_DOCS_URL || 'your-contact-page'}`));
+      : callback(new Error(`Origin '${origin}' not allowed`));
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-  maxAge: 86400 // Cache preflight for 24h
+  maxAge: 86400
 };
 
 app.use(cors(CORS_OPTIONS));
