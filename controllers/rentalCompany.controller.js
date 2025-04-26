@@ -49,9 +49,6 @@ const { uploadOnCloudinary } = require('../utils/connectCloudinary.js'); // Ensu
 //     return res.status(500).json({ error: error.message });
 //   }
 // };
-const RentalCompany = require('../models/rentalCompany.model');
-const bcrypt = require('bcrypt');
-const { uploadOnCloudinary } = require('../utils/cloudinary');
 
 exports.createRentalCompany = async (req, res) => {
   try {
