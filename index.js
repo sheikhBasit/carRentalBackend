@@ -9,7 +9,7 @@ const app = express();
 // Middleware
 
 // ====================== CORS CONFIGURATION ======================
-const ALLOWED_ORIGINS = [
+const allowedOrigins = [
   'http://localhost:5173',
   'http://localhost:3000',
   'capacitor://localhost',
@@ -17,44 +17,41 @@ const ALLOWED_ORIGINS = [
   'exp://192.168.x.x:19000',
   /\.ngrok\.io$/,
   'https://your-production-web.com',
-  'https://your-mobile-app.com',
-  'https://car-rental-frontend-black.vercel.app',  // <<==== ADD THIS
+  'https://your-mobile-app.com'
 ];
 
-const CORS_OPTIONS = {
-  origin: function (origin, callback) {
-    // Allow requests with no origin (mobile apps, Postman, etc.)
-    if (!origin) return callback(null, true);
-    
-    // Check against allowed origins
-    const isAllowed = ALLOWED_ORIGINS.some(allowed => {
-      if (typeof allowed === 'string') {
-        return allowed === origin;
-      } else if (allowed instanceof RegExp) {
-        return allowed.test(origin);
-      }
+const corsOptions = {
+  origin: (origin, callback) => {
+    if (!origin) {
+      // Allow requests like Postman, curl, server-to-server
+      return callback(null, true);
+    }
+
+    const isAllowed = allowedOrigins.some(allowed => {
+      if (typeof allowed === 'string') return allowed === origin;
+      if (allowed instanceof RegExp) return allowed.test(origin);
       return false;
     });
 
     if (isAllowed) {
-      // Reflect the request origin in the CORS header
-      return callback(null, origin);
+      callback(null, true);
     } else {
-      console.warn(`Blocked request from origin: ${origin}`);
-      return callback(new Error(`Origin '${origin}' not allowed`));
+      console.warn(`Blocked CORS request from origin: ${origin}`);
+      // Instead of crashing, reject with 403 CORS error
+      callback(new Error('Not allowed by CORS'));
     }
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-  maxAge: 86400
+  optionsSuccessStatus: 200, // Some legacy browsers choke on 204
 };
 
-// Apply CORS middleware
-app.use(cors(CORS_OPTIONS));
+app.use(cors(corsOptions));
 
-// Handle preflight requests
-app.options('*', cors(CORS_OPTIONS));
+// Handle all OPTIONS preflight requests quickly
+app.options('*', cors(corsOptions));
+
 
 
 app.use(express.json());
