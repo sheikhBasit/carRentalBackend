@@ -19,15 +19,21 @@ const allowedOrigins = [
   'https://your-mobile-app.com'
 ];
 
+// Update your CORS configuration
 const corsOptions = {
   origin: (origin, callback) => {
-    if (!origin) return callback(null, true); // allow non-browser tools
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    // Check against allowed origins
     const isAllowed = allowedOrigins.some(allowed => {
       if (typeof allowed === 'string') return allowed === origin;
       if (allowed instanceof RegExp) return allowed.test(origin);
       return false;
     });
-    if (isAllowed) {
+
+    if (isAllowed || process.env.NODE_ENV === 'development') {
+      // Important: Set the Vary header to avoid cache issues
       callback(null, true);
     } else {
       console.warn(`Blocked CORS request from origin: ${origin}`);
@@ -36,10 +42,17 @@ const corsOptions = {
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  allowedHeaders: [
+    'Content-Type', 
+    'Authorization', 
+    'X-Requested-With',
+    'Accept',
+    'Origin'
+  ],
+  exposedHeaders: ['Content-Length', 'X-Foo', 'X-Bar'],
   optionsSuccessStatus: 200,
+  maxAge: 86400 // 24 hours
 };
-
 // ====================== Middleware ======================
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions)); // Preflight handling
@@ -73,6 +86,10 @@ app.get('/', (req, res) => {
   res.send('Server is running!');
 });
 
+app.get('/test-cors', (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
+  res.json({ message: "CORS test successful", headers: req.headers });
+});
 // ====================== Database connection ======================
 const dbURL = process.env.MONGO_DB_URL;
 const connectDB = async () => {
