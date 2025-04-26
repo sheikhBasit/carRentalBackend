@@ -1,44 +1,102 @@
 const Driver = require('../models/driver.model.js');
 const { uploadOnCloudinary } = require('../utils/connectCloudinary.js');
 
+// exports.createDriver = async (req, res) => {
+//   try {
+//     console.log(req.body);
+//     console.log(req.files); // Debugging - See what file is received
+
+//     let profileImageLocalPath;
+//     if (req.files && req.files.profileimg && req.files.profileimg.length > 0) {
+//       profileImageLocalPath = req.files.profileimg[0].path;
+//     }
+
+//     if (!profileImageLocalPath) {
+//       return res.status(400).json({ message: "Profile image is required" });
+//     }
+
+//     // Upload to Cloudinary
+//     const profileImageUrl = await uploadOnCloudinary(profileImageLocalPath);
+//     if (!profileImageUrl) {
+//       return res.status(500).json({ message: "Image upload failed" });
+//     }
+
+//     // Save to DB
+//     const driver = new Driver({
+//       ...req.body,
+//       profileimg: profileImageUrl.url, // Store Cloudinary URL in DB
+//     });
+
+//     await driver.save();
+
+//     return res.status(201).json({
+//       message: "Driver created successfully",
+//       driver,
+//     });
+//   } catch (error) {
+//     return res.status(500).json({ error: error.message });
+//   }
+// };
+
+// Get all drivers
 exports.createDriver = async (req, res) => {
   try {
-    console.log(req.body);
-    console.log(req.files); // Debugging - See what file is received
+    const { ...driverData } = req.body;
 
-    let profileImageLocalPath;
-    if (req.files && req.files.profileimg && req.files.profileimg.length > 0) {
-      profileImageLocalPath = req.files.profileimg[0].path;
+    // Validate required fields
+    if (!req.files?.profileimg || req.files.profileimg.length === 0) {
+      return res.status(400).json({ 
+        success: false,
+        message: "Profile image is required" 
+      });
     }
 
-    if (!profileImageLocalPath) {
-      return res.status(400).json({ message: "Profile image is required" });
+    // Upload to Cloudinary using buffer
+    const profileImage = req.files.profileimg[0];
+    let profileImageUrl;
+    
+    try {
+      const result = await uploadOnCloudinary(profileImage.buffer); // Use buffer instead of path
+      if (!result?.url) {
+        throw new Error('Failed to upload profile image');
+      }
+      profileImageUrl = result.url;
+    } catch (uploadError) {
+      console.error("Error uploading driver image:", uploadError);
+      return res.status(500).json({ 
+        success: false,
+        message: "Profile image upload failed" 
+      });
     }
 
-    // Upload to Cloudinary
-    const profileImageUrl = await uploadOnCloudinary(profileImageLocalPath);
-    if (!profileImageUrl) {
-      return res.status(500).json({ message: "Image upload failed" });
-    }
-
-    // Save to DB
+    // Create and save driver
     const driver = new Driver({
-      ...req.body,
-      profileimg: profileImageUrl.url, // Store Cloudinary URL in DB
+      ...driverData,
+      profileimg: profileImageUrl
     });
 
     await driver.save();
 
     return res.status(201).json({
+      success: true,
       message: "Driver created successfully",
-      driver,
+      driver: {
+        ...driver.toObject(),
+        __v: undefined // Remove version key from response
+      }
     });
   } catch (error) {
-    return res.status(500).json({ error: error.message });
+    console.error("Error creating driver:", error);
+    
+    const statusCode = error.name === 'ValidationError' ? 400 : 500;
+    return res.status(statusCode).json({ 
+      success: false,
+      error: process.env.NODE_ENV === 'production'
+        ? 'An error occurred while creating the driver'
+        : error.message 
+    });
   }
 };
-
-// Get all drivers
 exports.getAllDrivers = async (req, res) => {
   try {
     const drivers = await Driver.find()

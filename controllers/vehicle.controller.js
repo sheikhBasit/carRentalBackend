@@ -7,26 +7,93 @@ const mongoose =  require('mongoose');
 
 
 // Create Vehicle (updated to include availability and cities)
+// exports.createVehicle = async (req, res) => {
+//   try {
+//     const { numberPlate, companyId, availability, cities, ...vehicleData } = req.body;
+
+//     if (!companyId) {
+//       return res.status(400).json({ message: "Company ID is required" });
+//     }
+//     console.log(availability)
+//     // Validate availability
+//     if (!availability ) {
+//       return res.status(400).json({ message: "Availability information is required" });
+//     }
+//     if (!availability.days) {
+//       return res.status(400).json({ message: "Availability information days is required" });
+//     }
+//     if ( !availability.startTime ) {
+//       return res.status(400).json({ message: "Availability information  startTime is required" });
+//     }
+//     if ( !availability.endTime) {
+//       return res.status(400).json({ message: "Availability information endTime is required" });
+//     }
+
+//     // Validate cities
+//     if (!cities || cities.length === 0) {
+//       return res.status(400).json({ message: "At least one city must be specified" });
+//     }
+
+//     const existingVehicle = await Vehicle.findOne({ numberPlate });
+//     if (existingVehicle) {
+//       return res.status(400).json({ message: "Vehicle with this number plate already exists" });
+//     }
+
+//     // Upload images
+//     const carImageUrls = [];
+//     if (req.files && req.files.length > 0) {
+//       for (const file of req.files) {
+//         const carImageUrl = await uploadOnCloudinary(file.path);
+//         if (carImageUrl) {
+//           carImageUrls.push(carImageUrl.url);
+//         }
+//       }
+//     }
+
+//     if (carImageUrls.length === 0) {
+//       return res.status(400).json({ message: "At least one car image is required" });
+//     }
+
+//     // Create new vehicle
+//     const vehicle = new Vehicle({
+//       ...vehicleData,
+//       numberPlate,
+//       company: companyId,
+//       carImageUrls,
+//       availability,
+//       cities,
+//       isAvailable: true
+//     });
+
+//     await vehicle.save();
+
+//     return res.status(201).json({
+//       message: "Vehicle created successfully",
+//       vehicle,
+//     });
+//   } catch (error) {
+//     console.error("Error creating vehicle:", error);
+//     return res.status(500).json({ error: error.message });
+//   }
+// };
+
 exports.createVehicle = async (req, res) => {
   try {
     const { numberPlate, companyId, availability, cities, ...vehicleData } = req.body;
 
+    // Validate required fields
     if (!companyId) {
       return res.status(400).json({ message: "Company ID is required" });
     }
-    console.log(availability)
+
     // Validate availability
-    if (!availability ) {
-      return res.status(400).json({ message: "Availability information is required" });
-    }
-    if (!availability.days) {
-      return res.status(400).json({ message: "Availability information days is required" });
-    }
-    if ( !availability.startTime ) {
-      return res.status(400).json({ message: "Availability information  startTime is required" });
-    }
-    if ( !availability.endTime) {
-      return res.status(400).json({ message: "Availability information endTime is required" });
+    if (!availability || 
+        !availability.days || 
+        !availability.startTime || 
+        !availability.endTime) {
+      return res.status(400).json({ 
+        message: "Complete availability information is required (days, startTime, endTime)" 
+      });
     }
 
     // Validate cities
@@ -34,24 +101,34 @@ exports.createVehicle = async (req, res) => {
       return res.status(400).json({ message: "At least one city must be specified" });
     }
 
+    // Check for existing vehicle
     const existingVehicle = await Vehicle.findOne({ numberPlate });
     if (existingVehicle) {
-      return res.status(400).json({ message: "Vehicle with this number plate already exists" });
+      return res.status(400).json({ 
+        message: "Vehicle with this number plate already exists" 
+      });
     }
 
-    // Upload images
+    // Upload images using buffers
     const carImageUrls = [];
     if (req.files && req.files.length > 0) {
       for (const file of req.files) {
-        const carImageUrl = await uploadOnCloudinary(file.path);
-        if (carImageUrl) {
-          carImageUrls.push(carImageUrl.url);
+        try {
+          const result = await uploadOnCloudinary(file.buffer); // Use buffer instead of path
+          if (result?.url) {
+            carImageUrls.push(result.url);
+          }
+        } catch (uploadError) {
+          console.error("Error uploading vehicle image:", uploadError);
+          continue;
         }
       }
     }
 
     if (carImageUrls.length === 0) {
-      return res.status(400).json({ message: "At least one car image is required" });
+      return res.status(400).json({ 
+        message: "At least one valid car image is required" 
+      });
     }
 
     // Create new vehicle
@@ -68,12 +145,23 @@ exports.createVehicle = async (req, res) => {
     await vehicle.save();
 
     return res.status(201).json({
+      success: true,
       message: "Vehicle created successfully",
-      vehicle,
+      vehicle: {
+        ...vehicle.toObject(),
+        __v: undefined // Remove version key from response
+      },
     });
   } catch (error) {
     console.error("Error creating vehicle:", error);
-    return res.status(500).json({ error: error.message });
+    
+    const statusCode = error.name === 'ValidationError' ? 400 : 500;
+    return res.status(statusCode).json({ 
+      success: false,
+      error: process.env.NODE_ENV === 'production'
+        ? 'An error occurred while creating the vehicle'
+        : error.message 
+    });
   }
 };
 
