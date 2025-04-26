@@ -51,56 +51,60 @@ const { uploadOnCloudinary } = require('../utils/connectCloudinary.js'); // Ensu
 // };
 exports.createRentalCompany = async (req, res) => {
   try {
+    console.log("Incoming request headers:", req.headers);
     console.log("Request body:", req.body);
     console.log("Request files:", req.files);
 
-    const { email, password, city, ...companyData } = req.body;
-
     // Validate required fields
-    if (!email || !password || !city) {
-      return res.status(400).json({ message: 'Email, password, and city are required' });
+    const requiredFields = ['email', 'password', 'city', 'companyName'];
+    const missingFields = requiredFields.filter(field => !req.body[field]);
+    
+    if (missingFields.length > 0) {
+      return res.status(400).json({
+        success: false,
+        error: `Missing required fields: ${missingFields.join(', ')}`
+      });
     }
 
-    // Normalize email and city
+    const { email, password, city, ...companyData } = req.body;
     const normalizedEmail = email.trim().toLowerCase();
     const normalizedCity = city.toLowerCase().replace(/\s+/g, "00");
 
     // Check if company exists
     const existingCompany = await RentalCompany.findOne({ email: normalizedEmail });
     if (existingCompany) {
-      return res.status(400).json({ message: 'Email already in use' });
-    }
-
-    // Helper function to safely upload files
-    const uploadFile = async (file) => {
-      if (!file || file.length === 0) return null;
-      try {
-        const result = await uploadOnCloudinary(file[0].path); // or file[0].buffer if using memory storage
-        return result?.url || null;
-      } catch (error) {
-        console.error(`Error uploading file:`, error);
-        return null;
-      }
-    };
-
-    // Upload all files in parallel
-    const [cnicFrontUrl, cnicBackUrl] = await Promise.all([
-      uploadFile(req.files?.cnicFront),
-      uploadFile(req.files?.cnicBack)
-    ]);
-
-    // Validate required documents
-    if (!cnicFrontUrl || !cnicBackUrl) {
-      return res.status(400).json({ 
-        message: 'CNIC (front & back) are required',
-        details: {
-          cnicFront: !!cnicFrontUrl,
-          cnicBack: !!cnicBackUrl
-        }
+      return res.status(409).json({ 
+        success: false,
+        message: "Email already in use" 
       });
     }
 
-    // Create rental company
+    // File upload validation
+    if (!req.files?.cnicFront || !req.files?.cnicBack) {
+      return res.status(400).json({
+        success: false,
+        error: 'Both CNIC front and back images are required'
+      });
+    }
+
+    // Upload files
+    const uploadFile = async (file) => {
+      try {
+        const result = await uploadOnCloudinary(file[0].path);
+        if (!result?.url) throw new Error('Failed to upload file');
+        return result.url;
+      } catch (error) {
+        console.error('File upload error:', error);
+        throw error;
+      }
+    };
+
+    const [cnicFrontUrl, cnicBackUrl] = await Promise.all([
+      uploadFile(req.files.cnicFront),
+      uploadFile(req.files.cnicBack)
+    ]);
+
+    // Create company
     const hashedPassword = await bcrypt.hash(password, 10);
     
     const rentalCompany = new RentalCompany({
@@ -109,38 +113,31 @@ exports.createRentalCompany = async (req, res) => {
       email: normalizedEmail,
       password: hashedPassword,
       cnicFrontUrl,
-      cnicBackUrl,
-      // Add any verification tokens if needed
-      // verificationToken: generateToken(),
-      // verificationTokenExpiresAt: Date.now() + 24 * 60 * 60 * 1000
+      cnicBackUrl
     });
 
     await rentalCompany.save();
 
-    // If you need to set cookies or tokens
-    // generateTokenAndSetCookie(res, rentalCompany._id);
+    // Remove sensitive data from response
+    const companyResponse = rentalCompany.toObject();
+    delete companyResponse.password;
 
-    // If you want to send verification email
-    // sendVerificationEmail(rentalCompany.email, verificationToken)
-    //   .catch(emailError => console.error('Email sending error:', emailError));
-
-    res.status(201).json({ 
+    res.status(201).json({
       success: true,
-      message: 'Rental company created successfully', 
-      company: { 
-        ...rentalCompany.toObject(), 
-        password: undefined // Remove sensitive data from response
-      } 
+      message: "Rental company created successfully",
+      company: companyResponse
     });
 
   } catch (error) {
-    console.error('Error creating rental company:', error);
-    res.status(500).json({ 
+    console.error("Error creating rental company:", error);
+    
+    // Determine appropriate status code
+    const statusCode = error.name === 'ValidationError' ? 400 : 500;
+    
+    res.status(statusCode).json({
       success: false,
-      message: 'Server error', 
-      error: process.env.NODE_ENV === 'development' 
-        ? error.message 
-        : 'Internal server error'
+      error: error.message || 'Internal server error',
+      ...(process.env.NODE_ENV === 'development' && { stack: error.stack })
     });
   }
 };

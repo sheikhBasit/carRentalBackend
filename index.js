@@ -4,10 +4,12 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
 const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 
 const app = express();
 
-// ====================== CORS CONFIGURATION ======================
+// ====================== CORS Configuration ======================
 const allowedOrigins = [
   'http://localhost:5173',
   'http://localhost:3000',
@@ -19,46 +21,95 @@ const allowedOrigins = [
   'https://your-mobile-app.com'
 ];
 
-const corsOptions = {
-  origin: (origin, callback) => {
-    if (!origin) return callback(null, true);
-    
-    const isAllowed = allowedOrigins.some(allowed => {
-      if (typeof allowed === 'string') return allowed === origin;
-      if (allowed instanceof RegExp) return allowed.test(origin);
-      return false;
-    });
-
-    if (isAllowed || process.env.NODE_ENV === 'development') {
-      callback(null, true);
-    } else {
-      console.warn(`Blocked CORS request from origin: ${origin}`);
-      callback(new Error('Not allowed by CORS'));
+// Configure multer storage
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadDir = path.join(__dirname, 'uploads');
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
     }
+    cb(null, uploadDir);
   },
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
-  optionsSuccessStatus: 200
+  filename: (req, file, cb) => {
+    cb(null, `${Date.now()}-${file.originalname}`);
+  }
+});
+
+const upload = multer({ 
+  storage,
+  limits: {
+    fileSize: 5 * 1024 * 1024 // 5MB limit
+  },
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only image files are allowed!'), false);
+    }
+  }
+});
+
+// Enhanced CORS middleware - must come FIRST
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  
+  // Check if origin is allowed
+  const isAllowed = allowedOrigins.some(allowed => {
+    if (typeof allowed === 'string') return allowed === origin;
+    if (allowed instanceof RegExp) return allowed.test(origin);
+    return false;
+  });
+
+  if (isAllowed || !origin || process.env.NODE_ENV === 'development') {
+    res.setHeader('Access-Control-Allow-Origin', origin || '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Vary', 'Origin'); // Important for caching
+  }
+
+  // Handle preflight requests
+  if (req.method === 'OPTIONS') {
+    return res.status(204).end();
+  }
+
+  next();
+});
+
+// Regular middleware
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(cookieParser());
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// ====================== Database Connection ======================
+const dbURL = process.env.MONGO_DB_URL || 'mongodb://localhost:27017/car-rental';
+const connectDB = async () => {
+  try {
+    await mongoose.connect(dbURL, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+      serverSelectionTimeoutMS: 5000
+    });
+    console.log('MongoDB connected successfully');
+  } catch (error) {
+    console.error('MongoDB connection error:', error);
+    process.exit(1);
+  }
 };
 
-// ====================== Middleware ======================
-app.use(cors(corsOptions));
-app.options('*', cors(corsOptions));
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-app.use(cookieParser());
+connectDB();
 
 // ====================== Routes ======================
-const rentalCompanyRoutes = require('./routes/rentalCompany.route.js');
-const vehicleRoutes = require('./routes/vehicle.route.js');
-const userRoutes = require('./routes/user.route.js');
-const bookingRoutes = require('./routes/booking.route.js');
-const driverRoutes = require('./routes/driver.route.js');
-const authRoute = require('./routes/auth.route.js');
-const commentRoutes = require('./routes/commentRoutes.js');
-const likeRoutes = require('./routes/likeRoutes.js');
-const stripeRoute = require('./routes/payment.route.js');
+const rentalCompanyRoutes = require('./routes/rentalCompany.route');
+const vehicleRoutes = require('./routes/vehicle.route');
+const userRoutes = require('./routes/user.route');
+const bookingRoutes = require('./routes/booking.route');
+const driverRoutes = require('./routes/driver.route');
+const authRoute = require('./routes/auth.route');
+const commentRoutes = require('./routes/commentRoutes');
+const likeRoutes = require('./routes/likeRoutes');
+const stripeRoute = require('./routes/payment.route');
 
 app.use('/users', userRoutes);
 app.use('/bookings', bookingRoutes);
@@ -70,65 +121,113 @@ app.use('/comment', commentRoutes);
 app.use('/likes', likeRoutes);
 app.use('/stripe', stripeRoute);
 
-// Health check
-app.get('/', (req, res) => {
-  res.send('Server is running!');
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.status(200).json({
+    status: 'OK',
+    timestamp: new Date().toISOString(),
+    dbStatus: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'
+  });
 });
 
+// Test CORS endpoint
 app.get('/test-cors', (req, res) => {
-  res.json({ message: "CORS test successful", headers: req.headers });
+  res.json({ 
+    message: "CORS test successful", 
+    headers: req.headers,
+    allowedOrigins
+  });
 });
-
-// ====================== Database connection ======================
-const dbURL = process.env.MONGO_DB_URL;
-const connectDB = async () => {
-  try {
-    await mongoose.connect(dbURL);
-    console.log('MongoDB connected successfully');
-  } catch (error) {
-    console.error('MongoDB connection error:', error);
-    process.exit(1);
-  }
-};
-connectDB();
 
 // ====================== Error Handling ======================
-app.use((err, req, res, next) => {
-  if (err instanceof multer.MulterError) {
-    console.error('Multer error:', err);
-    return res.status(400).json({
-      success: false,
-      error: err.message || 'File upload error',
-    });
-  }
-  next(err);
+// Not found handler
+app.use((req, res, next) => {
+  res.status(404).json({
+    success: false,
+    error: 'Endpoint not found'
+  });
 });
 
+// Error handler
 app.use((err, req, res, next) => {
-  console.error('General Error:', err);
-
-  // Set CORS headers
+  // Always set CORS headers on errors
   const origin = req.headers.origin;
   if (allowedOrigins.some(o => typeof o === 'string' ? o === origin : o.test(origin))) {
     res.setHeader('Access-Control-Allow-Origin', origin);
     res.setHeader('Access-Control-Allow-Credentials', 'true');
   }
 
-  if (err.message.includes('CORS') || err.message.includes('Origin')) {
-    return res.status(403).json({ 
-      success: false, 
-      error: err.message,
-      docs: process.env.API_DOCS_URL || 'https://your-api-docs.com'
+  // Handle different error types
+  if (err instanceof multer.MulterError) {
+    console.error('Multer error:', err);
+    return res.status(400).json({
+      success: false,
+      error: err.message || 'File upload error',
+      code: err.code
     });
   }
 
-  const status = err.statusCode || 500;
-  const message = err.message || 'Internal Server Error';
+  // Handle CORS errors specifically
+  if (err.message.includes('CORS') || err.message.includes('Origin')) {
+    return res.status(403).json({ 
+      success: false, 
+      error: 'Not allowed by CORS',
+      allowedOrigins,
+      requestOrigin: origin
+    });
+  }
+
+  // Handle mongoose validation errors
+  if (err.name === 'ValidationError') {
+    const errors = Object.values(err.errors).map(el => el.message);
+    return res.status(400).json({
+      success: false,
+      error: 'Validation error',
+      details: errors
+    });
+  }
+
+  console.error('Server Error:', err);
   
-  res.status(status).json({ 
-    success: false, 
-    error: message,
-    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
+  const status = err.statusCode || 500;
+  res.status(status).json({
+    success: false,
+    error: process.env.NODE_ENV === 'development' 
+      ? err.message 
+      : 'Internal Server Error',
+    ...(process.env.NODE_ENV === 'development' && { 
+      stack: err.stack,
+      type: err.name 
+    })
+  });
+});
+
+// ====================== Server Setup ======================
+const PORT = process.env.PORT || 5000;
+const server = app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('SIGTERM received. Shutting down gracefully');
+  server.close(() => {
+    console.log('Server closed');
+    mongoose.connection.close(false, () => {
+      console.log('MongoDB connection closed');
+      process.exit(0);
+    });
+  });
+});
+
+process.on('SIGINT', () => {
+  console.log('SIGINT received. Shutting down gracefully');
+  server.close(() => {
+    console.log('Server closed');
+    mongoose.connection.close(false, () => {
+      console.log('MongoDB connection closed');
+      process.exit(0);
+    });
   });
 });
 
