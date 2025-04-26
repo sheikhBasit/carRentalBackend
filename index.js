@@ -10,14 +10,15 @@ const app = express();
 
 // ====================== CORS CONFIGURATION ======================
 const ALLOWED_ORIGINS = [
-  'http://localhost:5173',          // Vite dev server
-  'http://localhost:3000',          // Create-React-App
-  'capacitor://localhost',          // Capacitor mobile
-  'http://10.0.2.2',                // Android emulator
-  'exp://192.168.x.x:19000',        // Expo dev
-  /\.ngrok\.io$/,                   // ngrok tunnels
-  'https://your-production-web.com', // Production web
-  'https://your-mobile-app.com'     // Production mobile
+  'http://localhost:5173',
+  'http://localhost:3000',
+  'capacitor://localhost',
+  'http://10.0.2.2',
+  'exp://192.168.x.x:19000',
+  /\.ngrok\.io$/,
+  'https://your-production-web.com',
+  'https://your-mobile-app.com',
+  'https://car-rental-frontend-black.vercel.app',  // <<==== ADD THIS
 ];
 
 const CORS_OPTIONS = {
