@@ -3,10 +3,9 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
+const multer = require('multer'); // already imported
 
 const app = express();
-
-// Middleware
 
 // ====================== CORS CONFIGURATION ======================
 const allowedOrigins = [
@@ -22,43 +21,33 @@ const allowedOrigins = [
 
 const corsOptions = {
   origin: (origin, callback) => {
-    if (!origin) {
-      // Allow requests like Postman, curl, server-to-server
-      return callback(null, true);
-    }
-
+    if (!origin) return callback(null, true); // allow non-browser tools
     const isAllowed = allowedOrigins.some(allowed => {
       if (typeof allowed === 'string') return allowed === origin;
       if (allowed instanceof RegExp) return allowed.test(origin);
       return false;
     });
-
     if (isAllowed) {
       callback(null, true);
     } else {
       console.warn(`Blocked CORS request from origin: ${origin}`);
-      // Instead of crashing, reject with 403 CORS error
       callback(new Error('Not allowed by CORS'));
     }
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-  optionsSuccessStatus: 200, // Some legacy browsers choke on 204
+  optionsSuccessStatus: 200,
 };
 
+// ====================== Middleware ======================
 app.use(cors(corsOptions));
-
-// Handle all OPTIONS preflight requests quickly
-app.options('*', cors(corsOptions));
-
-
-
+app.options('*', cors(corsOptions)); // Preflight handling
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
-// Routes
+// ====================== Routes ======================
 const rentalCompanyRoutes = require('./routes/rentalCompany.route.js');
 const vehicleRoutes = require('./routes/vehicle.route.js');
 const userRoutes = require('./routes/user.route.js');
@@ -79,9 +68,13 @@ app.use('/comment', commentRoutes);
 app.use('/likes', likeRoutes);
 app.use('/stripe', stripeRoute);
 
-// Database connection
-const dbURL = process.env.MONGO_DB_URL;
+// Health check
+app.get('/', (req, res) => {
+  res.send('Server is running!');
+});
 
+// ====================== Database connection ======================
+const dbURL = process.env.MONGO_DB_URL;
 const connectDB = async () => {
   try {
     await mongoose.connect(dbURL);
@@ -91,19 +84,26 @@ const connectDB = async () => {
     process.exit(1);
   }
 };
-
 connectDB();
 
-// Health check
-app.get('/', (req, res) => {
-  res.send('Server is running!');
+// ====================== Error Handling ======================
+
+// Multer-specific error handler
+app.use((err, req, res, next) => {
+  if (err instanceof multer.MulterError) {
+    console.error('Multer error:', err);
+    return res.status(400).json({
+      success: false,
+      error: err.message || 'File upload error',
+    });
+  }
+  next(err); // pass to next error handler
 });
 
-// Enhanced error handling
+// General error handler
 app.use((err, req, res, next) => {
-  console.error('Error:', err);
-  
-  // Handle CORS errors specifically
+  console.error('General Error:', err);
+
   if (err.message.includes('CORS') || err.message.includes('Origin')) {
     return res.status(403).json({ 
       success: false, 
@@ -112,7 +112,6 @@ app.use((err, req, res, next) => {
     });
   }
 
-  // Handle other errors
   const status = err.statusCode || 500;
   const message = err.message || 'Internal Server Error';
   
