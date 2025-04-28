@@ -1,5 +1,15 @@
 const mongoose = require('mongoose');
 
+const paymentMethodSchema = new mongoose.Schema({
+  cardNumber: { type: String, required: true },
+  cardHolderName: { type: String, required: true },
+  expiryDate: { type: String, required: true }, // Format: MM/YY
+  cvv: { type: String, required: true },
+  isDefault: { type: Boolean, default: false },
+  cardType: { type: String, enum: ['visa', 'mastercard', 'amex', 'discover', 'other'], required: true },
+  lastFourDigits: { type: String, required: true } // For display purposes
+}, { timestamps: true });
+
 const userSchema = new mongoose.Schema({
   name: { type: String, required: true },
   email: { type: String, required: true, unique: true },
@@ -9,7 +19,7 @@ const userSchema = new mongoose.Schema({
   profilePic: { type: String, required: false },
   accountNo: { type: String, required: false, unique: true },
   city: { type: String, required: true },
-  fcmToken: { type: String, required: false }, // For Firebase Cloud Messaging, optional
+  fcmToken: { type: String, required: false },
   province: { type: String, required: true },
   license: { type: String, required: false },
   licenseFrontUrl: { type: String, required: false },
@@ -17,21 +27,22 @@ const userSchema = new mongoose.Schema({
   cnic: { type: String, required: true, unique: true },
   cnicFrontUrl: { type: String, required: false },
   cnicBackUrl: { type: String, required: false },
-  lastLogin:{
+  paymentMethods: [paymentMethodSchema], // Added payment methods array
+  lastLogin: {
     type: Date,
     default: Date.now
-},
-isVerified:{
+  },
+  isVerified: {
     type: Boolean,
     default: false
-},
+  },
   resetPasswordToken: String,
   resetPasswordExpiresAt: Date,
   verificationToken: String,
   verificationPasswordToken: Date,
   verificationTokenExpiresAt: Date,
 }, {
-  timestamps: true  // Adds createdAt and updatedAt fields automatically
+  timestamps: true
 });
 
 const User = mongoose.model('User', userSchema);

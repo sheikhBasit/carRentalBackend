@@ -51,4 +51,13 @@ router.post('/reset-password/:token', userController.resetPassword);
 // Check authentication
 router.get('/check-auth', userController.checkAuth);
 
+
+router.post('/:userId/payment-methods', userController.addPaymentMethod);
+router.get('/:userId/payment-methods', userController.getPaymentMethods);
+router.patch('/:userId/payment-methods/:paymentMethodId/set-default', userController.setDefaultPaymentMethod);
+router.delete('/:userId/payment-methods/:paymentMethodId', userController.removePaymentMethod);
+
+
+
+
 module.exports = router;

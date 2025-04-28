@@ -442,3 +442,118 @@ exports.checkAuth = async (req, res) => {
     return res.status(500).json({ success: false, message: 'Server error' });
   }
 };
+
+
+
+// Add a payment method to user
+exports.addPaymentMethod = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const paymentData = req.body;
+
+    // Extract last 4 digits for display
+    paymentData.lastFourDigits = paymentData.cardNumber.slice(-4);
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // If this is the first payment method, set as default
+    if (user.paymentMethods.length === 0) {
+      paymentData.isDefault = true;
+    }
+
+    user.paymentMethods.push(paymentData);
+    await user.save();
+
+    res.status(201).json({
+      message: 'Payment method added successfully',
+      paymentMethods: user.paymentMethods
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Error adding payment method', error: error.message });
+  }
+};
+
+// Get all payment methods for a user
+exports.getPaymentMethods = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const user = await User.findById(userId).select('paymentMethods');
+    
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    res.status(200).json(user.paymentMethods);
+  } catch (error) {
+    res.status(500).json({ message: 'Error fetching payment methods', error: error.message });
+  }
+};
+
+// Set default payment method
+exports.setDefaultPaymentMethod = async (req, res) => {
+  try {
+    const { userId, paymentMethodId } = req.params;
+    
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Reset all payment methods to not default
+    user.paymentMethods.forEach(method => {
+      method.isDefault = false;
+    });
+
+    // Find and set the specified method as default
+    const methodToSetDefault = user.paymentMethods.id(paymentMethodId);
+    if (!methodToSetDefault) {
+      return res.status(404).json({ message: 'Payment method not found' });
+    }
+
+    methodToSetDefault.isDefault = true;
+    await user.save();
+
+    res.status(200).json({
+      message: 'Default payment method updated',
+      paymentMethods: user.paymentMethods
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Error setting default payment method', error: error.message });
+  }
+};
+
+// Remove a payment method
+exports.removePaymentMethod = async (req, res) => {
+  try {
+    const { userId, paymentMethodId } = req.params;
+    
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    const methodToRemove = user.paymentMethods.id(paymentMethodId);
+    if (!methodToRemove) {
+      return res.status(404).json({ message: 'Payment method not found' });
+    }
+
+    // If removing the default, set another as default if available
+    if (methodToRemove.isDefault && user.paymentMethods.length > 1) {
+      const newDefault = user.paymentMethods.find(m => !m._id.equals(paymentMethodId));
+      if (newDefault) newDefault.isDefault = true;
+    }
+
+    user.paymentMethods.pull(paymentMethodId);
+    await user.save();
+
+    res.status(200).json({
+      message: 'Payment method removed',
+      paymentMethods: user.paymentMethods
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Error removing payment method', error: error.message });
+  }
+};
