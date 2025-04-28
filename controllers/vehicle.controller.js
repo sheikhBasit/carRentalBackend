@@ -351,13 +351,22 @@ exports.getVehicleById = async (req, res) => {
 // Get all vehicles
 exports.getAllCityVehicles = async (req, res) => {
   try {
-    const { city } = req.query; // Extract city from query parameters
+    const { city } = req.query;
+    
+    // Validate city parameter
+    if (!city || typeof city !== 'string') {
+      return res.status(400).json({ 
+        success: false,
+        message: "City parameter is required and must be a string" 
+      });
+    }
+
     const normalizedCity = city.toLowerCase().replace(/\s+/g, "00");
 
     const vehicles = await Vehicle.aggregate([
       {
         $lookup: {
-          from: "rentalcompanies", // Ensure correct collection name
+          from: "rentalcompanies",
           localField: "company",
           foreignField: "_id",
           as: "company",
@@ -375,23 +384,39 @@ exports.getAllCityVehicles = async (req, res) => {
           ]
         }
       },
-      { $unwind: "$company" }, 
+      { $unwind: "$company" },
       {
         $match: {
-          "company.city": normalizedCity
+          "company.city": normalizedCity,
+          isAvailable: true // Consider adding availability filter
         }
       }
     ]);
 
     if (!vehicles || vehicles.length === 0) {
-      return res.status(404).json({ message: "No Vehicle Found for this city" });
+      return res.status(404).json({ 
+        success: false,
+        message: `No available vehicles found in ${city}` 
+      });
     }
 
-    return res.status(200).json(vehicles);
+    return res.status(200).json({
+      success: true,
+      count: vehicles.length,
+      data: vehicles
+    });
+
   } catch (error) {
-    return res.status(500).json({ error: error.message });
+    console.error(`Error fetching vehicles for city: ${req.query.city}`, error);
+    return res.status(500).json({ 
+      success: false,
+      error: process.env.NODE_ENV === 'production'
+        ? 'An error occurred while fetching vehicles'
+        : error.message 
+    });
   }
 };
+
 
 // Get vehicles by manufacturer
 exports.getVehiclesByManufacturer = async (req, res) => {
