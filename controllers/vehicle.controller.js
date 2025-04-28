@@ -349,49 +349,49 @@ exports.getVehicleById = async (req, res) => {
 
 
 // Get all vehicles
-// exports.getAllVehicles = async (req, res) => {
-//   try {
-//     const { city } = req.query; // Extract city from query parameters
-//     const normalizedCity = city.toLowerCase().replace(/\s+/g, "00");
+exports.getAllCityVehicles = async (req, res) => {
+  try {
+    const { city } = req.query; // Extract city from query parameters
+    const normalizedCity = city.toLowerCase().replace(/\s+/g, "00");
 
-//     const vehicles = await Vehicle.aggregate([
-//       {
-//         $lookup: {
-//           from: "rentalcompanies", // Ensure correct collection name
-//           localField: "company",
-//           foreignField: "_id",
-//           as: "company",
-//           pipeline: [
-//             {
-//               $project: {
-//                 companyName: 1,
-//                 gmail: 1,
-//                 address: 1,
-//                 phNum: 1,
-//                 bankDetails: 1,
-//                 city: 1
-//               }
-//             }
-//           ]
-//         }
-//       },
-//       { $unwind: "$company" }, 
-//       {
-//         $match: {
-//           "company.city": normalizedCity
-//         }
-//       }
-//     ]);
+    const vehicles = await Vehicle.aggregate([
+      {
+        $lookup: {
+          from: "rentalcompanies", // Ensure correct collection name
+          localField: "company",
+          foreignField: "_id",
+          as: "company",
+          pipeline: [
+            {
+              $project: {
+                companyName: 1,
+                gmail: 1,
+                address: 1,
+                phNum: 1,
+                bankDetails: 1,
+                city: 1
+              }
+            }
+          ]
+        }
+      },
+      { $unwind: "$company" }, 
+      {
+        $match: {
+          "company.city": normalizedCity
+        }
+      }
+    ]);
 
-//     if (!vehicles || vehicles.length === 0) {
-//       return res.status(404).json({ message: "No Vehicle Found for this city" });
-//     }
+    if (!vehicles || vehicles.length === 0) {
+      return res.status(404).json({ message: "No Vehicle Found for this city" });
+    }
 
-//     return res.status(200).json(vehicles);
-//   } catch (error) {
-//     return res.status(500).json({ error: error.message });
-//   }
-// };
+    return res.status(200).json(vehicles);
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+};
 
 // Get vehicles by manufacturer
 exports.getVehiclesByManufacturer = async (req, res) => {

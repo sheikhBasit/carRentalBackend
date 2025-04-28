@@ -5,6 +5,8 @@ const upload = require('../midllewares/fileUpload.middleware.js');
 
 router.post('/postVehicle', upload.array("carImages", 3), vehicleController.createVehicle);
 router.get('/getVehicle', vehicleController.getAllVehicles);
+router.get('/getCityVehicle', vehicleController.getAllCityVehicles);
+
 router.get('/fetchVehicles',vehicleController.fetchAllVehicles);
 router.get("/getManufacturers", vehicleController.getManufacturers);
 router.get("/company", vehicleController.getCompanyVehicles);
