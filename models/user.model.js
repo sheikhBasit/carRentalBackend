@@ -4,7 +4,7 @@ const paymentMethodSchema = new mongoose.Schema({
   cardNumber: { type: String, required: true },
   cardHolderName: { type: String, required: false },
   expiryDate: { type: String, required: true }, // Format: MM/YY
-  cvv: { type: String, required: true },
+  cvv: { type: String, required: false },
   isDefault: { type: Boolean, default: false },
   cardType: { type: String, enum: ['visa', 'mastercard', 'amex', 'discover', 'other'], required: true },
   lastFourDigits: { type: String, required: false } // For display purposes
