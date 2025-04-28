@@ -4,41 +4,53 @@ const Payment = require("../models/payment.model");
 const Booking = require("../models/booking.model");
 
 
+// In your backend (Node.js)
 exports.createPaymentIntent = async (req, res) => {
-  const { bookingId, amount, currency } = req.body;
+  const { amount, currency = "usd", bookingId } = req.body;
 
   try {
-    // Validate booking exists
-    const booking = await Booking.findById(bookingId);
-    if (!booking) {
-      return res.status(404).json({ 
-        success: false,
-        message: "Booking not found" 
+    // 1. Validate input
+    if (!amount || isNaN(amount)) {
+      return res.status(400).json({ 
+        error: "Invalid amount" 
       });
     }
 
-    // Create payment intent
+    // 2. Create customer (if needed)
+    const customer = await stripe.customers.create();
+
+    // 3. Create payment intent
     const paymentIntent = await stripe.paymentIntents.create({
-      amount: Math.round(amount * 100), // Convert to cents
-      currency: currency || "usd",
-      metadata: { bookingId },
-      description: `Payment for booking ${bookingId}`,
+      amount: Math.round(amount * 100), // in cents
+      currency,
+      customer: customer.id,
+      automatic_payment_methods: {
+        enabled: true,
+      },
+      metadata: { bookingId: bookingId || 'none' }
     });
 
-    res.status(200).json({
-      success: true,
+    // 4. Create ephemeral key
+    const ephemeralKey = await stripe.ephemeralKeys.create(
+      { customer: customer.id },
+      { apiVersion: '2023-08-16' }
+    );
+
+    // 5. Return all needed data
+    res.json({
       clientSecret: paymentIntent.client_secret,
+      ephemeralKey: ephemeralKey.secret,
+      customer: customer.id,
       paymentIntentId: paymentIntent.id
     });
+
   } catch (error) {
-    console.error("Error creating payment intent:", error);
-    res.status(500).json({
-      success: false,
-      message: error.message || "Failed to create payment intent",
+    console.error("Backend payment error:", error);
+    res.status(500).json({ 
+      error: error.message || "Payment processing failed" 
     });
   }
 };
-
 exports.confirmPayment = async (req, res) => {
   const { paymentIntentId, bookingId, userId } = req.body;
 
