@@ -4,6 +4,41 @@ const TransactionBooking = require('../models/transaction.model.js');
 const Booking = require('../models/booking.model.js');
 const mongoose = require('mongoose');
 
+// Get TransactionBooking by Booking ID
+exports.getTransactionByBookingId = async (req, res) => {
+    try {
+      const { bookingId } = req.params;
+  
+      // Validate bookingId is a valid MongoDB ObjectId
+      if (!mongoose.Types.ObjectId.isValid(bookingId)) {
+        return res.status(400).json({ error: "Invalid booking ID format" });
+      }
+  
+      const transaction = await TransactionBooking.findOne({ bookingId })
+        .populate('bookingId')
+        .exec();
+  
+      if (!transaction) {
+        return res.status(404).json({ 
+          message: "Transaction not found for the given booking ID",
+          success: false
+        });
+      }
+  
+      return res.status(200).json({
+        transaction,
+        success: true
+      });
+  
+    } catch (error) {
+      console.error("Error fetching transaction by booking ID:", error);
+      return res.status(500).json({ 
+        error: error.message,
+        success: false 
+      });
+    }
+  };
+
 // Create a new TransactionBooking
 exports.createTransactionBooking = async (req, res) => {
   try {

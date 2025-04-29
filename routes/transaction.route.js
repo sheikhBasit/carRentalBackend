@@ -7,6 +7,9 @@ const transactionBookingController = require('../controllers/transaction.control
 // Create new TransactionBooking
 router.post('/post', transactionBookingController.createTransactionBooking);
 
+
+router.get('/booking/:bookingId', transactionBookingController.getTransactionByBookingId);
+
 // Get all TransactionBookings
 router.get('/', transactionBookingController.getAllTransactionBookings);
 
