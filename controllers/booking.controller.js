@@ -89,13 +89,14 @@ const confirmBooking = async (req, res) => {
     booking.status = 'confirmed';
     await booking.save();
 
-    // Mark vehicle as unavailable
+    // Mark vehicle as unavailable and increment trips
     vehicle.isAvailable = false;
+    vehicle.trips = (vehicle.trips || 0) + 1; // Handle undefined trips
     await vehicle.save();
 
     return res.status(200).json({ 
       success: true,
-      message: "Booking confirmed and vehicle marked as unavailable" 
+      message: "Booking confirmed, vehicle marked as unavailable, and trip count updated" 
     });
 
   } catch (error) {
@@ -106,6 +107,7 @@ const confirmBooking = async (req, res) => {
     });
   }
 };
+
 const getAllBookings = async (req, res) => {
   console.log("get all bookings");
   

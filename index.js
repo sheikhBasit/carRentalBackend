@@ -124,7 +124,7 @@ app.use('/stripe', stripeRoute);
 app.use('/transaction', transactionBookingRoutes);
 
 // Health check endpoint
-app.get('/health', (req, res) => {
+app.get('/', (req, res) => {
   res.status(200).json({
     status: 'OK',
     timestamp: new Date().toISOString(),
