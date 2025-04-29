@@ -73,41 +73,71 @@ const confirmBooking = async (req, res) => {
   try {
     const { bookingId } = req.params;
 
-    // Find the booking
+    // Find and validate the booking
     const booking = await Booking.findById(bookingId);
     if (!booking) {
-      return res.status(404).json({ error: "Booking not found" });
+      return res.status(404).json({ 
+        success: false,
+        error: "Booking not found" 
+      });
     }
 
-    // Find the vehicle
+    // Validate booking is in pending state
+    if (booking.status !== 'pending') {
+      return res.status(400).json({ 
+        success: false,
+        error: `Booking is already ${booking.status}` 
+      });
+    }
+
+    // Find and validate the vehicle
     const vehicle = await Vehicle.findById(booking.idVehicle);
     if (!vehicle) {
-      return res.status(404).json({ error: "Vehicle not found" });
+      return res.status(404).json({ 
+        success: false,
+        error: "Vehicle not found" 
+      });
     }
 
-    // Update booking status to confirmed
-    booking.status = 'confirmed';
-    await booking.save();
+    // Start transaction to ensure both updates succeed or fail together
+    const session = await mongoose.startSession();
+    session.startTransaction();
 
-    // Mark vehicle as unavailable and increment trips
-    vehicle.isAvailable = false;
-    vehicle.trips = (vehicle.trips || 0) + 1; // Handle undefined trips
-    await vehicle.save();
+    try {
+      // Update booking status to confirmed
+      booking.status = 'confirmed';
+      await booking.save({ session });
 
-    return res.status(200).json({ 
-      success: true,
-      message: "Booking confirmed, vehicle marked as unavailable, and trip count updated" 
-    });
+      // Mark vehicle as unavailable and increment trips
+      vehicle.isAvailable = false;
+      vehicle.trips = (vehicle.trips || 0) + 1;
+      await vehicle.save({ session });
+
+      // Commit the transaction
+      await session.commitTransaction();
+      session.endSession();
+
+      return res.status(200).json({ 
+        success: true,
+        message: "Booking confirmed successfully",
+        booking
+      });
+
+    } catch (transactionError) {
+      // If any error occurs, abort the transaction
+      await session.abortTransaction();
+      session.endSession();
+      throw transactionError;
+    }
 
   } catch (error) {
     console.error("Error confirming booking:", error);
     return res.status(500).json({ 
       success: false,
-      error: error.message 
+      error: error.message || "Failed to confirm booking" 
     });
   }
 };
-
 const getAllBookings = async (req, res) => {
   console.log("get all bookings");
   
