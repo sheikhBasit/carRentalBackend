@@ -1,9 +1,10 @@
 const express = require('express');
 const router = express.Router();
-const {createBooking , getAllBookings,getBookingByUserId ,getBookingByCompanyId, getBookingById , updateBooking , deleteBooking} = require('../controllers/booking.controller');
+const {createBooking , getAllBookings,getBookingByUserId ,confirmBooking,getBookingByCompanyId, getBookingById , updateBooking , deleteBooking} = require('../controllers/booking.controller');
 
 // Define booking routes
 router.post('/postBooking', createBooking);
+router.put('confirm/:bookingId',confirmBooking );
 router.get("/userBookings", getBookingByUserId);
 router.get("/companyBookings", getBookingByCompanyId);
 router.get('/getBooking', getAllBookings);

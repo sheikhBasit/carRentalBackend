@@ -39,7 +39,7 @@ const createBooking = async (req, res) => {
       return res.status(400).json({ error: "Vehicle is not available for booking" });
     }
 
-    // Create the booking
+    // Create the booking (but don't mark vehicle as unavailable yet)
     const booking = new Booking({
       ...bookingData,
       user: user,
@@ -48,12 +48,7 @@ const createBooking = async (req, res) => {
 
     // Save the booking
     await booking.save();
-    console.log("Booking created successfully:", booking);
-
-    // Update vehicle availability
-    vehicle.isAvailable = false;
-    await vehicle.save();
-    console.log(`Vehicle ${idVehicle} availability updated to false`);
+    console.log("Booking created successfully with pending status:", booking);
 
     // Populate booking details for response
     const populatedBooking = await Booking.findById(booking._id)
@@ -68,6 +63,43 @@ const createBooking = async (req, res) => {
 
   } catch (error) {
     console.error("Error creating booking:", error);
+    return res.status(500).json({ 
+      success: false,
+      error: error.message 
+    });
+  }
+};
+const confirmBooking = async (req, res) => {
+  try {
+    const { bookingId } = req.params;
+
+    // Find the booking
+    const booking = await Booking.findById(bookingId);
+    if (!booking) {
+      return res.status(404).json({ error: "Booking not found" });
+    }
+
+    // Find the vehicle
+    const vehicle = await Vehicle.findById(booking.idVehicle);
+    if (!vehicle) {
+      return res.status(404).json({ error: "Vehicle not found" });
+    }
+
+    // Update booking status to confirmed
+    booking.status = 'confirmed';
+    await booking.save();
+
+    // Mark vehicle as unavailable
+    vehicle.isAvailable = false;
+    await vehicle.save();
+
+    return res.status(200).json({ 
+      success: true,
+      message: "Booking confirmed and vehicle marked as unavailable" 
+    });
+
+  } catch (error) {
+    console.error("Error confirming booking:", error);
     return res.status(500).json({ 
       success: false,
       error: error.message 
@@ -253,5 +285,5 @@ const deleteBooking = async (req, res) => {
   }
 };
 
-module.exports = {createBooking,getBookingByCompanyId , getAllBookings,getBookingByUserId , getBookingById , updateBooking , deleteBooking};
+module.exports = {createBooking,getBookingByCompanyId ,confirmBooking, getAllBookings,getBookingByUserId , getBookingById , updateBooking , deleteBooking};
 
