@@ -3,6 +3,7 @@ const Vehicle = require('../models/vehicle.model.js'); // Ensure correct path
 const { uploadOnCloudinary } = require('../utils/connectCloudinary.js');
 const fs =  require('fs');
 const mongoose =  require('mongoose');
+const Booking = require('../models/booking.model.js');
 
 
 
