@@ -227,7 +227,7 @@ exports.getAllVehicles = async (req, res) => {
           foreignField: "idVehicle",
           as: "bookings",
           pipeline: [
-            { $match: { status: "completed" } }
+            { $match: { status: "confirmed" } }
           ]
         }
       },
