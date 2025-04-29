@@ -182,6 +182,7 @@ const getBookingByUserId = async (req, res) => {
                 carImageUrls: 1,
                 transmission: 1,
                 rent: 1,
+                capacity: 1,
               },
             },
           ],
