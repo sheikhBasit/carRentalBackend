@@ -3,6 +3,9 @@ const router = express.Router();
 const vehicleController = require('../controllers/vehicle.controller.js');
 const upload = require('../midllewares/fileUpload.middleware.js');
 
+
+router.delete('/', vehicleController.deleteAllVehicles);
+
 router.post('/postVehicle', upload.array("carImages", 3), vehicleController.createVehicle);
 router.get('/getVehicle', vehicleController.getAllVehicles);
 router.get('/getCityVehicle', vehicleController.getAllCityVehicles);

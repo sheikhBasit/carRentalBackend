@@ -5,7 +5,27 @@ const fs =  require('fs');
 const mongoose =  require('mongoose');
 const Booking = require('../models/booking.model.js');
 
-
+exports.deleteAllVehicles = async (req, res) => {
+  try {
+      // This would depend on your ORM/query builder
+      // For Mongoose: await Vehicle.deleteMany({});
+      // For Sequelize: await Vehicle.destroy({ where: {} });
+      // For raw SQL: DELETE FROM vehicles;
+      
+      const result = await Vehicle.deleteMany({}); // Example for Mongoose
+      
+      res.status(200).json({
+          message: `Successfully deleted ${result.deletedCount} vehicles`,
+          success: true
+      });
+  } catch (error) {
+      res.status(500).json({
+          message: "Error deleting vehicles",
+          error: error.message,
+          success: false
+      });
+  }
+};
 
 // Create Vehicle (updated to include availability and cities)
 // exports.createVehicle = async (req, res) => {
