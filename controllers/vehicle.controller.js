@@ -348,6 +348,8 @@ exports.getVehicleById = async (req, res) => {
 };
 
 
+
+
 // Get all vehicles
 exports.getAllCityVehicles = async (req, res) => {
   try {
