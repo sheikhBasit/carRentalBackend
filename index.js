@@ -208,27 +208,58 @@ const server = app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
 
-// Graceful shutdown
-process.on('SIGTERM', () => {
+// // Graceful shutdown
+// process.on('SIGTERM', () => {
+//   console.log('SIGTERM received. Shutting down gracefully');
+//   server.close(() => {
+//     console.log('Server closed');
+//     mongoose.connection.close(false, () => {
+//       console.log('MongoDB connection closed');
+//       process.exit(0);
+//     });
+//   });
+// });
+
+// process.on('SIGINT', () => {
+//   console.log('SIGINT received. Shutting down gracefully');
+//   server.close(() => {
+//     console.log('Server closed');
+//     mongoose.connection.close(false, () => {
+//       console.log('MongoDB connection closed');
+//       process.exit(0);
+//     });
+//   });
+// });
+
+process.on('SIGTERM', async () => {
   console.log('SIGTERM received. Shutting down gracefully');
-  server.close(() => {
+  server.close(async () => {
     console.log('Server closed');
-    mongoose.connection.close(false, () => {
+    try {
+      await mongoose.connection.close(false);
       console.log('MongoDB connection closed');
       process.exit(0);
-    });
+    } catch (error) {
+      console.error('Error closing MongoDB connection:', error);
+      process.exit(1);
+    }
   });
 });
 
-process.on('SIGINT', () => {
+process.on('SIGINT', async () => {
   console.log('SIGINT received. Shutting down gracefully');
-  server.close(() => {
+  server.close(async () => {
     console.log('Server closed');
-    mongoose.connection.close(false, () => {
+    try {
+      await mongoose.connection.close(false);
       console.log('MongoDB connection closed');
       process.exit(0);
-    });
+    } catch (error) {
+      console.error('Error closing MongoDB connection:', error);
+      process.exit(1);
+    }
   });
 });
+
 
 module.exports = app;
