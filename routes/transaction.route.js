@@ -10,6 +10,9 @@ router.post('/post', transactionBookingController.createTransactionBooking);
 // Get all TransactionBookings
 router.get('/', transactionBookingController.getAllTransactionBookings);
 
+// Get transactions for a specific company
+router.get('/company/:companyId', transactionBookingController.getTransactionsByCompany);
+
 // Get a single TransactionBooking by ID
 router.get('/:id', transactionBookingController.getTransactionBookingById);
 

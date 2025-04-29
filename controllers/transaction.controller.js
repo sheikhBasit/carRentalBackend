@@ -37,6 +37,28 @@ exports.getAllTransactionBookings = async (req, res) => {
   }
 };
 
+// Get all TransactionBookings for a specific company
+exports.getTransactionsByCompany = async (req, res) => {
+    try {
+      const { companyId } = req.params;
+  
+      // Find all bookings for the given company
+      const bookings = await Booking.find({ companyId }).select('_id');
+  
+      const bookingIds = bookings.map(booking => booking._id);
+  
+      // Find all transaction bookings for those bookings
+      const transactions = await TransactionBooking.find({
+        bookingId: { $in: bookingIds }
+      }).populate('bookingId');
+  
+      return res.status(200).json(transactions);
+    } catch (error) {
+      console.error("Error fetching transactions by company:", error);
+      return res.status(500).json({ error: error.message });
+    }
+  };
+  
 // Get a single TransactionBooking by ID
 exports.getTransactionBookingById = async (req, res) => {
   try {
