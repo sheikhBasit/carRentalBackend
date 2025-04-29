@@ -110,6 +110,7 @@ const authRoute = require('./routes/auth.route');
 const commentRoutes = require('./routes/commentRoutes');
 const likeRoutes = require('./routes/likeRoutes');
 const stripeRoute = require('./routes/payment.route');
+const transactionBookingRoutes = require('./routes/transaction.route');
 
 app.use('/users', userRoutes);
 app.use('/bookings', bookingRoutes);
@@ -120,6 +121,7 @@ app.use('/auth', authRoute);
 app.use('/comment', commentRoutes);
 app.use('/likes', likeRoutes);
 app.use('/stripe', stripeRoute);
+app.use('/transaction', transactionBookingRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {

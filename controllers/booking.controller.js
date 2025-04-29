@@ -6,27 +6,55 @@ const createBooking = async (req, res) => {
   try {
     console.log("Received booking request with data:", req.body);
 
-    const { user, ...bookingData } = req.body;
+    const { user, idVehicle, ...bookingData } = req.body;
 
+    // Validate required fields
     if (!user) {
       console.log("No user ID provided in request");
       return res.status(400).json({ error: "User ID is required" });
     }
 
+    if (!idVehicle) {
+      console.log("No vehicle ID provided in request");
+      return res.status(400).json({ error: "Vehicle ID is required" });
+    }
+
+    // Check if user exists
     const userExists = await User.findById(user);
     if (!userExists) {
       console.log(`User not found with ID: ${user}`);
       return res.status(404).json({ error: "User not found" });
     }
 
+    // Check if vehicle exists and is available
+    const vehicle = await Vehicle.findById(idVehicle);
+    if (!vehicle) {
+      console.log(`Vehicle not found with ID: ${idVehicle}`);
+      return res.status(404).json({ error: "Vehicle not found" });
+    }
+
+    if (!vehicle.isAvailable) {
+      console.log(`Vehicle with ID ${idVehicle} is not available`);
+      return res.status(400).json({ error: "Vehicle is not available for booking" });
+    }
+
+    // Create the booking
     const booking = new Booking({
       ...bookingData,
       user: user,
+      idVehicle: idVehicle
     });
 
+    // Save the booking
     await booking.save();
     console.log("Booking created successfully:", booking);
 
+    // Update vehicle availability
+    vehicle.isAvailable = false;
+    await vehicle.save();
+    console.log(`Vehicle ${idVehicle} availability updated to false`);
+
+    // Populate booking details for response
     const populatedBooking = await Booking.findById(booking._id)
       .populate("user", "name email")
       .populate("idVehicle", "manufacturer model");
@@ -36,6 +64,7 @@ const createBooking = async (req, res) => {
       message: "Booking created successfully", 
       booking: populatedBooking 
     });
+
   } catch (error) {
     console.error("Error creating booking:", error);
     return res.status(500).json({ 
