@@ -1,6 +1,7 @@
 const Booking = require('../models/booking.model.js'); // Ensure the correct path
 const mongoose = require('mongoose');
 const User = require('../models/user.model.js'); // Ensure the correct path
+const Vehicle = require('../models/vehicle.model.js'); // Ensure the correct path
 
 const createBooking = async (req, res) => {
   try {
