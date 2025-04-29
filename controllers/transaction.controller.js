@@ -42,12 +42,16 @@ exports.getTransactionsByCompany = async (req, res) => {
     try {
       const { companyId } = req.params;
   
-      // Find all bookings for the given company
-      const bookings = await Booking.find({ companyId }).select('_id');
+      if (!companyId) {
+        return res.status(400).json({ error: "Company ID is required" });
+      }
+  
+      // Step 1: Find all bookings that belong to this company
+      const bookings = await Booking.find({ company: companyId }).select('_id'); // Make sure field name is 'company'
   
       const bookingIds = bookings.map(booking => booking._id);
   
-      // Find all transaction bookings for those bookings
+      // Step 2: Find all transactions where bookingId is in the list
       const transactions = await TransactionBooking.find({
         bookingId: { $in: bookingIds }
       }).populate('bookingId');
@@ -58,7 +62,7 @@ exports.getTransactionsByCompany = async (req, res) => {
       return res.status(500).json({ error: error.message });
     }
   };
-  
+   
 // Get a single TransactionBooking by ID
 exports.getTransactionBookingById = async (req, res) => {
   try {
