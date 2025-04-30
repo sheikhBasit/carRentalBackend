@@ -3,7 +3,6 @@ const mongoose = require('mongoose');
 const User = require('../models/user.model.js'); // Ensure the correct path
 const Vehicle = require('../models/vehicle.model.js'); // Ensure the correct path
 const Driver = require('../models/driver.model.js'); // Ensure the correct path
-const Transaction = require('../models/transaction.model.js'); // Ensure the correct path
 
 const createBooking = async (req, res) => {
   try {
@@ -36,8 +35,8 @@ const createBooking = async (req, res) => {
     }
 
     // Validate dates and times
-    const fromDateTime = new Date(`${fromTime}`);
-    const toDateTime = new Date(`${toTime}`);
+    const fromDateTime = new Date(`${from}T${fromTime}`);
+    const toDateTime = new Date(`${to}T${toTime}`);
     const currentDateTime = new Date();
 
     if (fromDateTime < currentDateTime) {
@@ -72,7 +71,7 @@ const createBooking = async (req, res) => {
       });
     }
 
-    // Check if vehicle exists and is available
+    // Check if vehicle exists
     const vehicle = await Vehicle.findById(idVehicle);
     if (!vehicle) {
       console.log(`Vehicle not found with ID: ${idVehicle}`);
@@ -82,27 +81,31 @@ const createBooking = async (req, res) => {
       });
     }
 
- 
-    // Check for overlapping bookings
-    const overlappingBookings = await Booking.find({
-      idVehicle,
-      status: { $in: ['confirmed', 'pending'] },
-      $or: [
-        {
-          fromTime: { $lt: toTime },
-          toTime: { $gt: fromTime }
-        }
-      ]
-    });
+    // Check vehicle blackout dates
+    if (vehicle.blackoutDates && vehicle.blackoutDates.length > 0) {
+      const bookingDates = [];
+      let currentDate = new Date(fromDateTime);
+      const endDate = new Date(toDateTime);
+      
+      while (currentDate <= endDate) {
+        bookingDates.push(currentDate.toISOString().split('T')[0]);
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
 
-    if (overlappingBookings.length > 0) {
-      return res.status(400).json({ 
-        success: false,
-        error: "Vehicle is already booked for the selected time period" 
-      });
+      const blackoutDates = vehicle.blackoutDates.map(date => 
+        new Date(date).toISOString().split('T')[0]
+      );
+
+      const hasBlackoutDate = bookingDates.some(date => blackoutDates.includes(date));
+      if (hasBlackoutDate) {
+        return res.status(400).json({ 
+          success: false,
+          error: "Vehicle is not available for the selected dates" 
+        });
+      }
     }
 
-    // If driver is provided, validate driver availability
+    // If driver is provided, check driver availability and blackout dates
     let driverDoc = null;
     if (driver) {
       driverDoc = await Driver.findById(driver);
@@ -113,7 +116,30 @@ const createBooking = async (req, res) => {
         });
       }
 
-    
+      // Check driver blackout dates
+      if (driverDoc.blackoutDates && driverDoc.blackoutDates.length > 0) {
+        const bookingDates = [];
+        let currentDate = new Date(fromDateTime);
+        const endDate = new Date(toDateTime);
+        
+        while (currentDate <= endDate) {
+          bookingDates.push(currentDate.toISOString().split('T')[0]);
+          currentDate.setDate(currentDate.getDate() + 1);
+        }
+
+        const blackoutDates = driverDoc.blackoutDates.map(date => 
+          new Date(date).toISOString().split('T')[0]
+        );
+
+        const hasBlackoutDate = bookingDates.some(date => blackoutDates.includes(date));
+        if (hasBlackoutDate) {
+          return res.status(400).json({ 
+            success: false,
+            error: "Driver is not available for the selected dates" 
+          });
+        }
+      }
+
       // Check for driver's overlapping bookings
       const driverOverlappingBookings = await Booking.find({
         driver,
@@ -134,12 +160,31 @@ const createBooking = async (req, res) => {
       }
     }
 
+    // Check for overlapping bookings
+    const overlappingBookings = await Booking.find({
+      idVehicle,
+      status: { $in: ['confirmed', 'pending'] },
+      $or: [
+        {
+          fromTime: { $lt: toTime },
+          toTime: { $gt: fromTime }
+        }
+      ]
+    });
+
+    if (overlappingBookings.length > 0) {
+      return res.status(400).json({ 
+        success: false,
+        error: "Vehicle is already booked for the selected time period" 
+      });
+    }
+
     // Start a session for transaction
     const session = await mongoose.startSession();
     session.startTransaction();
 
     try {
-      // Create the booking with pending status
+      // Create the booking
       const booking = new Booking({
         ...bookingData,
         user,
@@ -151,38 +196,8 @@ const createBooking = async (req, res) => {
         toTime,
         intercity,
         cityName: intercity ? cityName.toLowerCase() : undefined,
-        status: 'pending' // Set initial status as pending
+        status: 'pending'
       });
-
-      // Add booking dates to vehicle's blackout dates
-      const bookingDates = [];
-      let currentDate = new Date(fromDateTime);
-      const endDate = new Date(toDateTime);
-      
-      while (currentDate <= endDate) {
-        bookingDates.push(new Date(currentDate));
-        currentDate.setDate(currentDate.getDate() + 1);
-      }
-
-      // Update vehicle's blackout dates
-      await Vehicle.findByIdAndUpdate(
-        idVehicle,
-        { 
-          $addToSet: { blackoutDates: { $each: bookingDates } },
-        },
-        { session }
-      );
-
-      // If driver is assigned, update driver's blackout dates
-      if (driverDoc) {
-        await Driver.findByIdAndUpdate(
-          driver,
-          { 
-            $addToSet: { blackoutDates: { $each: bookingDates } },
-          },
-          { session }
-        );
-      }
 
       // Save the booking
       await booking.save({ session });
@@ -221,16 +236,9 @@ const createBooking = async (req, res) => {
 
 const confirmBooking = async (req, res) => {
   try {
-    const { bookingId, paymentIntentId } = req.body;
+    const { bookingId } = req.params;
 
-    if (!bookingId || !paymentIntentId) {
-      return res.status(400).json({ 
-        success: false,
-        error: "Booking ID and payment intent ID are required" 
-      });
-    }
-
-    // Find the booking
+    // Find and validate the booking
     const booking = await Booking.findById(bookingId);
     if (!booking) {
       return res.status(404).json({ 
@@ -239,23 +247,24 @@ const confirmBooking = async (req, res) => {
       });
     }
 
-    // Check if booking is already confirmed
-    if (booking.status === 'confirmed') {
-      return res.status(400).json({ 
-        success: false,
-        error: "Booking is already confirmed" 
-      });
-    }
-
-    // Check if booking is pending
+    // Validate booking is in pending state
     if (booking.status !== 'pending') {
       return res.status(400).json({ 
         success: false,
-        error: "Booking is not in pending state" 
+        error: `Booking is already ${booking.status}` 
       });
     }
 
-    // Start a session for transaction
+    // Find and validate the vehicle
+    const vehicle = await Vehicle.findById(booking.idVehicle);
+    if (!vehicle) {
+      return res.status(404).json({ 
+        success: false,
+        error: "Vehicle not found" 
+      });
+    }
+
+    // Start transaction to ensure both updates succeed or fail together
     const session = await mongoose.startSession();
     session.startTransaction();
 
@@ -264,57 +273,59 @@ const confirmBooking = async (req, res) => {
       booking.status = 'confirmed';
       await booking.save({ session });
 
-      // Create transaction record
-      const transaction = new Transaction({
-        bookingId: booking._id,
-        paymentIntentId,
-        amount: booking.totalAmount,
-        paymentStatus: 'completed'
-      });
-      await transaction.save({ session });
-
-      // Update vehicle availability
-      const vehicle = await Vehicle.findById(booking.idVehicle);
-      if (vehicle) {
-        await vehicle.save({ session });
+      // Add booking dates to vehicle's blackout dates
+      const bookingDates = [];
+      let currentDate = new Date(booking.from);
+      const endDate = new Date(booking.to);
+      
+      while (currentDate <= endDate) {
+        bookingDates.push(new Date(currentDate));
+        currentDate.setDate(currentDate.getDate() + 1);
       }
 
-      // Update driver availability if driver is assigned
+      // Update vehicle's blackout dates
+      await Vehicle.findByIdAndUpdate(
+        booking.idVehicle,
+        { 
+          $addToSet: { blackoutDates: { $each: bookingDates } },
+          $inc: { trips: 1 }
+        },
+        { session }
+      );
+
+      // If driver is assigned, update driver's blackout dates
       if (booking.driver) {
-        const driver = await Driver.findById(booking.driver);
-        if (driver) {
-          await driver.save({ session });
-        }
+        await Driver.findByIdAndUpdate(
+          booking.driver,
+          { 
+            $addToSet: { blackoutDates: { $each: bookingDates } }
+          },
+          { session }
+        );
       }
 
       // Commit the transaction
       await session.commitTransaction();
       session.endSession();
 
-      // Populate booking details for response
-      const populatedBooking = await Booking.findById(booking._id)
-        .populate("user", "name email")
-        .populate("idVehicle", "manufacturer model")
-        .populate("driver", "name license");
-
       return res.status(200).json({ 
         success: true,
-        message: "Booking confirmed successfully", 
-        booking: populatedBooking 
+        message: "Booking confirmed successfully",
+        booking
       });
 
-    } catch (error) {
+    } catch (transactionError) {
       // If any error occurs, abort the transaction
       await session.abortTransaction();
       session.endSession();
-      throw error;
+      throw transactionError;
     }
 
   } catch (error) {
     console.error("Error confirming booking:", error);
     return res.status(500).json({ 
       success: false,
-      error: error.message 
+      error: error.message || "Failed to confirm booking" 
     });
   }
 };
@@ -365,7 +376,7 @@ const cancelBooking = async (req, res) => {
       booking.status = 'cancelled';
       await booking.save({ session });
 
-      // Mark vehicle as available again
+      // Mark vehicle as availabl
       await vehicle.save({ session });
 
       // Commit the transaction
