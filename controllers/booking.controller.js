@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const User = require('../models/user.model.js'); // Ensure the correct path
 const Vehicle = require('../models/vehicle.model.js'); // Ensure the correct path
 const Driver = require('../models/driver.model.js'); // Ensure the correct path
+const Transaction = require('../models/transaction.model.js'); // Ensure the correct path
 
 const createBooking = async (req, res) => {
   try {
@@ -151,7 +152,7 @@ const createBooking = async (req, res) => {
     session.startTransaction();
 
     try {
-      // Create the booking
+      // Create the booking with pending status
       const booking = new Booking({
         ...bookingData,
         user,
@@ -163,7 +164,7 @@ const createBooking = async (req, res) => {
         toTime,
         intercity,
         cityName: intercity ? cityName.toLowerCase() : undefined,
-        status: 'pending'
+        status: 'pending' // Set initial status as pending
       });
 
       // Add booking dates to vehicle's blackout dates
@@ -232,11 +233,19 @@ const createBooking = async (req, res) => {
     });
   }
 };
+
 const confirmBooking = async (req, res) => {
   try {
-    const { bookingId } = req.params;
+    const { bookingId, paymentIntentId } = req.body;
 
-    // Find and validate the booking
+    if (!bookingId || !paymentIntentId) {
+      return res.status(400).json({ 
+        success: false,
+        error: "Booking ID and payment intent ID are required" 
+      });
+    }
+
+    // Find the booking
     const booking = await Booking.findById(bookingId);
     if (!booking) {
       return res.status(404).json({ 
@@ -245,24 +254,23 @@ const confirmBooking = async (req, res) => {
       });
     }
 
-    // Validate booking is in pending state
+    // Check if booking is already confirmed
+    if (booking.status === 'confirmed') {
+      return res.status(400).json({ 
+        success: false,
+        error: "Booking is already confirmed" 
+      });
+    }
+
+    // Check if booking is pending
     if (booking.status !== 'pending') {
       return res.status(400).json({ 
         success: false,
-        error: `Booking is already ${booking.status}` 
+        error: "Booking is not in pending state" 
       });
     }
 
-    // Find and validate the vehicle
-    const vehicle = await Vehicle.findById(booking.idVehicle);
-    if (!vehicle) {
-      return res.status(404).json({ 
-        success: false,
-        error: "Vehicle not found" 
-      });
-    }
-
-    // Start transaction to ensure both updates succeed or fail together
+    // Start a session for transaction
     const session = await mongoose.startSession();
     session.startTransaction();
 
@@ -271,33 +279,59 @@ const confirmBooking = async (req, res) => {
       booking.status = 'confirmed';
       await booking.save({ session });
 
-      // Mark vehicle as unavailable and increment trips
-      vehicle.isAvailable = false;
-      vehicle.trips = (vehicle.trips || 0) + 1;
-      await vehicle.save({ session });
+      // Create transaction record
+      const transaction = new Transaction({
+        bookingId: booking._id,
+        paymentIntentId,
+        amount: booking.totalAmount,
+        paymentStatus: 'completed'
+      });
+      await transaction.save({ session });
+
+      // Update vehicle availability
+      const vehicle = await Vehicle.findById(booking.idVehicle);
+      if (vehicle) {
+        vehicle.isAvailable = false;
+        await vehicle.save({ session });
+      }
+
+      // Update driver availability if driver is assigned
+      if (booking.driver) {
+        const driver = await Driver.findById(booking.driver);
+        if (driver) {
+          driver.isAvailable = false;
+          await driver.save({ session });
+        }
+      }
 
       // Commit the transaction
       await session.commitTransaction();
       session.endSession();
 
+      // Populate booking details for response
+      const populatedBooking = await Booking.findById(booking._id)
+        .populate("user", "name email")
+        .populate("idVehicle", "manufacturer model")
+        .populate("driver", "name license");
+
       return res.status(200).json({ 
         success: true,
-        message: "Booking confirmed successfully",
-        booking
+        message: "Booking confirmed successfully", 
+        booking: populatedBooking 
       });
 
-    } catch (transactionError) {
+    } catch (error) {
       // If any error occurs, abort the transaction
       await session.abortTransaction();
       session.endSession();
-      throw transactionError;
+      throw error;
     }
 
   } catch (error) {
     console.error("Error confirming booking:", error);
     return res.status(500).json({ 
       success: false,
-      error: error.message || "Failed to confirm booking" 
+      error: error.message 
     });
   }
 };
