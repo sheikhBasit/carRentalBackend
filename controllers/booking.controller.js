@@ -396,5 +396,5 @@ const deleteBooking = async (req, res) => {
   }
 };
 
-module.exports = {createBooking,getBookingByCompanyId ,confirmBooking, getAllBookings,getBookingByUserId , getBookingById , updateBooking , deleteBooking};
+module.exports = {createBooking,getBookingByCompanyId,cancelBooking ,confirmBooking, getAllBookings,getBookingByUserId , getBookingById , updateBooking , deleteBooking};
 
