@@ -88,9 +88,9 @@ const driverSchema = new Schema({
     required: true,
     validate: {
       validator: function(v) {
-        return /^[+]*[(]{0,1}[0-9]{1,4}[)]{0,1}[-\s\./0-9]*$/.test(v);
+        return /^(\+92|0)3[0-4][0-9][-]?[0-9]{7}$/.test(v);
       },
-      message: props => `${props.value} is not a valid phone number!`
+      message: props => `${props.value} is not a valid Pakistani phone number!`
     }
   },
   

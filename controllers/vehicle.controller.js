@@ -777,7 +777,8 @@ exports.updateVehicle = async (req, res) => {
       blackoutDates,
       minimumRentalHours,
       maximumRentalDays,
-      isAvailable
+      isAvailable,
+      removeImages // Add this field to specify images to remove
     } = req.body;
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -807,9 +808,21 @@ exports.updateVehicle = async (req, res) => {
       }
     }
 
-    // Handle image updates
-    let carImageUrls = existingVehicle.carImageUrls;
+    // Handle image updates - improved version
+    let carImageUrls = [...existingVehicle.carImageUrls];
+    
+    // Remove specified images if any
+    if (removeImages && Array.isArray(removeImages)) {
+      carImageUrls = carImageUrls.filter(url => !removeImages.includes(url));
+    }
+    
+    // Add new images if any
     if (req.files && req.files.length > 0) {
+      // First delete all existing images if we want to replace them completely
+      // Or you can implement logic to keep some and replace others
+      // Here we'll assume new files should replace all existing images
+      carImageUrls = [];
+      
       for (const file of req.files) {
         try {
           const result = await uploadOnCloudinary(file.buffer);
@@ -821,6 +834,14 @@ exports.updateVehicle = async (req, res) => {
           continue;
         }
       }
+    }
+
+    // Validate we have at least one image (if that's a requirement)
+    if (carImageUrls.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "At least one car image is required"
+      });
     }
 
     // Prepare update object
@@ -869,7 +890,6 @@ exports.updateVehicle = async (req, res) => {
     });
   }
 };
-
 // Delete a vehicle
 exports.deleteVehicle = async (req, res) => {
   try {
