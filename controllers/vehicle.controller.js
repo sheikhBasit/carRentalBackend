@@ -533,7 +533,6 @@ exports.getAllCityVehicles = async (req, res) => {
       {
         $match: {
           "company.city": normalizedCity,
-          isAvailable: true // Consider adding availability filter
         }
       }
     ]);
