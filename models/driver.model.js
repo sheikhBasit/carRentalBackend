@@ -88,10 +88,11 @@ const driverSchema = new Schema({
     required: true,
     validate: {
       validator: function(v) {
-        // Remove any non-digit characters for validation
-        const cleanNumber = v.replace(/\D/g, '');
+        // Remove all non-digit characters except + for validation
+        const cleanNumber = v.replace(/[^\d+]/g, '');
         // Check if it's a valid Pakistani mobile number (03XX or +92XX followed by 7 digits)
-        return /^((\+92|0)3[0-4][0-9][0-9]{7})$/.test(cleanNumber);
+        // Accepts any network code starting with 3
+        return /^((\+92|0)3[0-9]{2}[0-9]{7})$/.test(cleanNumber);
       },
       message: props => `${props.value} is not a valid Pakistani phone number! Please use format: +923XX-XXXXXXX or 03XX-XXXXXXX`
     }

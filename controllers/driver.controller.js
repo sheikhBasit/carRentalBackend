@@ -59,8 +59,17 @@ exports.createDriver = async (req, res) => {
       blackoutDates
     } = req.body;
 
+    // Format phone number before validation
+    const formattedPhNo = phNo.replace(/\s/g, ''); // Remove any spaces
+    if (!formattedPhNo.match(/^((\+92|0)3[0-9]{2}[0-9]{7})$/)) {
+      return res.status(400).json({
+        success: false,
+        error: "Invalid phone number format. Please use format: +923XX-XXXXXXX or 03XX-XXXXXXX"
+      });
+    }
+
     // Validate required fields
-    if (!name || !company || !license || !cnic || !phNo || !age || 
+    if (!name || !company || !license || !cnic || !formattedPhNo || !age || 
         !experience || !baseHourlyRate || !baseDailyRate || !availability) {
       return res.status(400).json({ 
         success: false,
@@ -115,7 +124,7 @@ exports.createDriver = async (req, res) => {
       company,
       license: license.toUpperCase(),
       cnic,
-      phNo,
+      phNo: formattedPhNo,
       age,
       experience,
       profileimg: profileImageUrl,
