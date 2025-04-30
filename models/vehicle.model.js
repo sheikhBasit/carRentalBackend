@@ -126,10 +126,7 @@ const vehicleSchema = new mongoose.Schema({
   },
   availability: availabilitySchema,
   cities: [citySchema],
-  isAvailable: { 
-    type: Boolean, 
-    default: true 
-  },
+  
   currentLocation: {
     type: {
       type: String,
@@ -199,7 +196,6 @@ vehicleSchema.index({ currentLocation: '2dsphere' });
 vehicleSchema.index({ manufacturer: 1, model: 1 });
 vehicleSchema.index({ year: -1 });
 vehicleSchema.index({ rent: 1 });
-vehicleSchema.index({ isAvailable: 1 });
 
 vehicleSchema.plugin(mongooseAggregatePaginate);
 

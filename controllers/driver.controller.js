@@ -137,7 +137,6 @@ exports.createDriver = async (req, res) => {
       currentPromotion: currentPromotion || null,
       availability,
       blackoutDates: blackoutDates || [],
-      isAvailable: true
     });
 
     await driver.save();
@@ -167,7 +166,6 @@ exports.getAllDrivers = async (req, res) => {
   try {
     const {
       company,
-      isAvailable,
       minRating,
       maxRating,
       minExperience,
@@ -184,9 +182,6 @@ exports.getAllDrivers = async (req, res) => {
     // Add filters based on query parameters
     if (company) {
       matchStage.company = new mongoose.Types.ObjectId(company);
-    }
-    if (isAvailable !== undefined) {
-      matchStage.isAvailable = isAvailable === 'true';
     }
     if (minRating || maxRating) {
       matchStage.rating = {};
@@ -512,7 +507,6 @@ exports.updateDriver = async (req, res) => {
       currentPromotion,
       availability,
       blackoutDates,
-      isAvailable
     } = req.body;
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -598,7 +592,6 @@ exports.updateDriver = async (req, res) => {
       ...(currentPromotion && { currentPromotion }),
       ...(availability && { availability }),
       ...(blackoutDates && { blackoutDates }),
-      ...(typeof isAvailable === 'boolean' && { isAvailable }),
       profileimg: profileImageUrl
     };
 
@@ -709,7 +702,6 @@ exports.getAvailableDriversByDate = async (req, res) => {
         { blackoutDates: { $size: 0 } },
         { blackoutDates: { $not: { $elemMatch: { $eq: inputDate.toISOString().split('T')[0] } } } }
       ],
-      isAvailable: true
     };
 
     // If time is provided, filter by time window

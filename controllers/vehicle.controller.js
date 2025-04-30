@@ -83,7 +83,6 @@ exports.deleteAllVehicles = async (req, res) => {
 //       carImageUrls,
 //       availability,
 //       cities,
-//       isAvailable: true
 //     });
 
 //     await vehicle.save();
@@ -203,7 +202,6 @@ exports.createVehicle = async (req, res) => {
       blackoutDates: blackoutDates || [],
       minimumRentalHours: minimumRentalHours || 4,
       maximumRentalDays: maximumRentalDays || 30,
-      isAvailable: true
     });
 
     await vehicle.save();
@@ -260,7 +258,6 @@ exports.getAllVehicles = async (req, res) => {
     const bookedVehicleIds = currentBookings.map(b => b.idVehicle);
 
     const matchStage = {
-      isAvailable: true,
       _id: { $nin: bookedVehicleIds }
     };
 
@@ -425,13 +422,6 @@ exports.getVehicleById = async (req, res) => {
       },
       {
         $addFields: {
-          isAvailable: {
-            $cond: {
-              if: { $gt: [{ $size: "$bookings" }, 0] },
-              then: false,
-              else: true
-            }
-          },
           isInsuranceValid: { $gt: ["$insuranceExpiry", new Date()] },
           availableDates: {
             $filter: {
@@ -776,7 +766,6 @@ exports.updateVehicle = async (req, res) => {
       blackoutDates,
       minimumRentalHours,
       maximumRentalDays,
-      isAvailable,
       removeImages // Add this field to specify images to remove
     } = req.body;
 
@@ -864,7 +853,6 @@ exports.updateVehicle = async (req, res) => {
       ...(blackoutDates && { blackoutDates }),
       ...(minimumRentalHours && { minimumRentalHours }),
       ...(maximumRentalDays && { maximumRentalDays }),
-      ...(typeof isAvailable === 'boolean' && { isAvailable }),
       carImageUrls
     };
 

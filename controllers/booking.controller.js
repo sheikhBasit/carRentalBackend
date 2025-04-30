@@ -82,14 +82,7 @@ const createBooking = async (req, res) => {
       });
     }
 
-    if (!vehicle.isAvailable) {
-      console.log(`Vehicle with ID ${idVehicle} is not available`);
-      return res.status(400).json({ 
-        success: false,
-        error: "Vehicle is not available for booking" 
-      });
-    }
-
+ 
     // Check for overlapping bookings
     const overlappingBookings = await Booking.find({
       idVehicle,
@@ -120,13 +113,7 @@ const createBooking = async (req, res) => {
         });
       }
 
-      if (!driverDoc.isAvailable) {
-        return res.status(400).json({ 
-          success: false,
-          error: "Driver is not available" 
-        });
-      }
-
+    
       // Check for driver's overlapping bookings
       const driverOverlappingBookings = await Booking.find({
         driver,
@@ -182,7 +169,6 @@ const createBooking = async (req, res) => {
         idVehicle,
         { 
           $addToSet: { blackoutDates: { $each: bookingDates } },
-          isAvailable: false
         },
         { session }
       );
@@ -193,7 +179,6 @@ const createBooking = async (req, res) => {
           driver,
           { 
             $addToSet: { blackoutDates: { $each: bookingDates } },
-            isAvailable: false
           },
           { session }
         );
@@ -291,7 +276,6 @@ const confirmBooking = async (req, res) => {
       // Update vehicle availability
       const vehicle = await Vehicle.findById(booking.idVehicle);
       if (vehicle) {
-        vehicle.isAvailable = false;
         await vehicle.save({ session });
       }
 
@@ -299,7 +283,6 @@ const confirmBooking = async (req, res) => {
       if (booking.driver) {
         const driver = await Driver.findById(booking.driver);
         if (driver) {
-          driver.isAvailable = false;
           await driver.save({ session });
         }
       }
@@ -383,7 +366,6 @@ const cancelBooking = async (req, res) => {
       await booking.save({ session });
 
       // Mark vehicle as available again
-      vehicle.isAvailable = true;
       await vehicle.save({ session });
 
       // Commit the transaction

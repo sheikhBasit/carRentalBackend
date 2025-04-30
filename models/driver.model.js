@@ -135,10 +135,7 @@ const driverSchema = new Schema({
   
   // Availability System
   availability: availabilitySchema,
-  isAvailable: { 
-    type: Boolean, 
-    default: true 
-  },
+  
   blackoutDates: [{ 
     type: Date,
     validate: {
@@ -224,7 +221,6 @@ driverSchema.methods.getEffectiveHourlyRate = function(vehicleType) {
 
 // Indexes
 driverSchema.index({ company: 1 });
-driverSchema.index({ isAvailable: 1 });
 driverSchema.index({ rating: -1 });
 driverSchema.index({ 'currentAssignment.booking': 1 });
 driverSchema.index({ baseHourlyRate: 1 });
