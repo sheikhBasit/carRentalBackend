@@ -5,6 +5,7 @@ const {createBooking , getAllBookings,getBookingByUserId ,confirmBooking,getBook
 // Define booking routes
 router.post('/postBooking', createBooking);
 router.put('/confirm/:bookingId',confirmBooking );
+router.patch('/cancelBooking/:bookingId', cancelBooking);
 router.get("/userBookings", getBookingByUserId);
 router.get("/companyBookings", getBookingByCompanyId);
 router.get('/getBooking', getAllBookings);

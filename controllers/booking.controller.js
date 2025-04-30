@@ -138,6 +138,84 @@ const confirmBooking = async (req, res) => {
     });
   }
 };
+
+const cancelBooking = async (req, res) => {
+  try {
+    const { bookingId } = req.params;
+
+    // Find and validate the booking
+    const booking = await Booking.findById(bookingId);
+    if (!booking) {
+      return res.status(404).json({ 
+        success: false,
+        error: "Booking not found" 
+      });
+    }
+
+    // Validate booking is not already cancelled/completed
+    if (booking.status === 'cancelled') {
+      return res.status(400).json({ 
+        success: false,
+        error: "Booking is already cancelled" 
+      });
+    }
+
+    if (booking.status === 'completed') {
+      return res.status(400).json({ 
+        success: false,
+        error: "Cannot cancel a completed booking" 
+      });
+    }
+
+    // Find and validate the vehicle
+    const vehicle = await Vehicle.findById(booking.idVehicle);
+    if (!vehicle) {
+      return res.status(404).json({ 
+        success: false,
+        error: "Vehicle not found" 
+      });
+    }
+
+    // Start transaction to ensure atomic updates
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+      // Update booking status to cancelled
+      booking.status = 'cancelled';
+      await booking.save({ session });
+
+      // Mark vehicle as available again
+      vehicle.isAvailable = true;
+      await vehicle.save({ session });
+
+      // Commit the transaction
+      await session.commitTransaction();
+      session.endSession();
+
+      return res.status(200).json({ 
+        success: true,
+        message: "Booking cancelled successfully",
+        booking
+      });
+
+    } catch (transactionError) {
+      // Rollback if any operation fails
+      await session.abortTransaction();
+      session.endSession();
+      throw transactionError;
+    }
+
+  } catch (error) {
+    console.error("Error cancelling booking:", error);
+    return res.status(500).json({ 
+      success: false,
+      error: error.message || "Failed to cancel booking" 
+    });
+  }
+};
+
+
 const getAllBookings = async (req, res) => {
   console.log("get all bookings");
   
