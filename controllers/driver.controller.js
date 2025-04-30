@@ -531,6 +531,18 @@ exports.updateDriver = async (req, res) => {
       });
     }
 
+    // Format phone number before validation
+    const formattedPhNo = phNo ? phNo.replace(/\s/g, '') : existingDriver.phNo;
+    const cleanNumber = formattedPhNo.replace(/[^\d+]/g, '');
+    
+    // Check if it's a valid Pakistani mobile number
+    if (!cleanNumber.match(/^((\+92|0)3[0-9]{9})$/)) {
+      return res.status(400).json({
+        success: false,
+        error: "Invalid phone number format. Please use format: +923XX-XXXXXXX or 03XX-XXXXXXX"
+      });
+    }
+
     // Check for duplicate license or CNIC if being updated
     if (license || cnic) {
       const duplicateDriver = await Driver.findOne({
@@ -577,7 +589,7 @@ exports.updateDriver = async (req, res) => {
       ...(name && { name }),
       ...(license && { license: license.toUpperCase() }),
       ...(cnic && { cnic }),
-      ...(phNo && { phNo }),
+      ...(phNo && { phNo: formattedPhNo }),
       ...(age && { age }),
       ...(experience && { experience }),
       ...(baseHourlyRate && { baseHourlyRate }),
