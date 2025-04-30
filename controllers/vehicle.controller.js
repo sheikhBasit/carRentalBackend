@@ -100,42 +100,69 @@ exports.deleteAllVehicles = async (req, res) => {
 
 exports.createVehicle = async (req, res) => {
   try {
-    const { numberPlate, companyId, availability, cities, ...vehicleData } = req.body;
+    const {
+      numberPlate,
+      companyId,
+      manufacturer,
+      model,
+      year,
+      rent,
+      capacity,
+      transmission,
+      fuelType,
+      vehicleType,
+      features,
+      mileage,
+      lastServiceDate,
+      insuranceExpiry,
+      availability,
+      cities,
+      currentLocation,
+      blackoutDates,
+      minimumRentalHours,
+      maximumRentalDays
+    } = req.body;
 
     // Validate required fields
-    if (!companyId) {
-      return res.status(400).json({ message: "Company ID is required" });
+    if (!companyId || !numberPlate || !manufacturer || !model || !year || !rent || 
+        !capacity || !transmission || !fuelType || !vehicleType || !insuranceExpiry) {
+      return res.status(400).json({ 
+        success: false,
+        message: "Missing required fields" 
+      });
     }
 
     // Validate availability
-    if (!availability || 
-        !availability.days || 
-        !availability.startTime || 
-        !availability.endTime) {
+    if (!availability || !availability.days || !availability.startTime || !availability.endTime) {
       return res.status(400).json({ 
+        success: false,
         message: "Complete availability information is required (days, startTime, endTime)" 
       });
     }
 
     // Validate cities
     if (!cities || cities.length === 0) {
-      return res.status(400).json({ message: "At least one city must be specified" });
+      return res.status(400).json({ 
+        success: false,
+        message: "At least one city must be specified" 
+      });
     }
 
     // Check for existing vehicle
     const existingVehicle = await Vehicle.findOne({ numberPlate });
     if (existingVehicle) {
       return res.status(400).json({ 
+        success: false,
         message: "Vehicle with this number plate already exists" 
       });
     }
 
-    // Upload images using buffers
+    // Upload images
     const carImageUrls = [];
     if (req.files && req.files.length > 0) {
       for (const file of req.files) {
         try {
-          const result = await uploadOnCloudinary(file.buffer); // Use buffer instead of path
+          const result = await uploadOnCloudinary(file.buffer);
           if (result?.url) {
             carImageUrls.push(result.url);
           }
@@ -148,18 +175,34 @@ exports.createVehicle = async (req, res) => {
 
     if (carImageUrls.length === 0) {
       return res.status(400).json({ 
+        success: false,
         message: "At least one valid car image is required" 
       });
     }
 
     // Create new vehicle
     const vehicle = new Vehicle({
-      ...vehicleData,
-      numberPlate,
       company: companyId,
+      numberPlate: numberPlate.toUpperCase(),
+      manufacturer: manufacturer.toLowerCase(),
+      model: model.toLowerCase(),
+      year,
       carImageUrls,
+      rent,
+      capacity,
+      transmission,
+      fuelType,
+      vehicleType,
+      features: features || [],
+      mileage: mileage || 0,
+      lastServiceDate: lastServiceDate ? new Date(lastServiceDate) : undefined,
+      insuranceExpiry: new Date(insuranceExpiry),
       availability,
       cities,
+      currentLocation: currentLocation || { type: 'Point', coordinates: [0, 0] },
+      blackoutDates: blackoutDates || [],
+      minimumRentalHours: minimumRentalHours || 4,
+      maximumRentalDays: maximumRentalDays || 30,
       isAvailable: true
     });
 
@@ -170,8 +213,8 @@ exports.createVehicle = async (req, res) => {
       message: "Vehicle created successfully",
       vehicle: {
         ...vehicle.toObject(),
-        __v: undefined // Remove version key from response
-      },
+        __v: undefined
+      }
     });
   } catch (error) {
     console.error("Error creating vehicle:", error);
@@ -189,7 +232,20 @@ exports.createVehicle = async (req, res) => {
 // Get available vehicles (updated to exclude booked vehicles)
 exports.getAllVehicles = async (req, res) => {
   try {
-    const { city, date, time } = req.query;
+    const { 
+      city, 
+      date, 
+      time, 
+      manufacturer, 
+      vehicleType, 
+      minRent, 
+      maxRent,
+      transmission,
+      fuelType,
+      minCapacity,
+      maxCapacity
+    } = req.query;
+
     const normalizedCity = city?.toLowerCase().replace(/\s+/g, "00");
 
     // Get current bookings to exclude
@@ -203,6 +259,47 @@ exports.getAllVehicles = async (req, res) => {
 
     const bookedVehicleIds = currentBookings.map(b => b.idVehicle);
 
+    const matchStage = {
+      isAvailable: true,
+      _id: { $nin: bookedVehicleIds }
+    };
+
+    // Add filters based on query parameters
+    if (normalizedCity) {
+      matchStage["company.city"] = normalizedCity;
+    }
+    if (date) {
+      matchStage["availability.days"] = { 
+        $in: [new Date(date).toLocaleString('en-US', { weekday: 'long' })] 
+      };
+    }
+    if (time) {
+      matchStage["availability.startTime"] = { $lte: time };
+      matchStage["availability.endTime"] = { $gte: time };
+    }
+    if (manufacturer) {
+      matchStage.manufacturer = manufacturer.toLowerCase();
+    }
+    if (vehicleType) {
+      matchStage.vehicleType = vehicleType;
+    }
+    if (minRent || maxRent) {
+      matchStage.rent = {};
+      if (minRent) matchStage.rent.$gte = Number(minRent);
+      if (maxRent) matchStage.rent.$lte = Number(maxRent);
+    }
+    if (transmission) {
+      matchStage.transmission = transmission;
+    }
+    if (fuelType) {
+      matchStage.fuelType = fuelType;
+    }
+    if (minCapacity || maxCapacity) {
+      matchStage.capacity = {};
+      if (minCapacity) matchStage.capacity.$gte = Number(minCapacity);
+      if (maxCapacity) matchStage.capacity.$lte = Number(maxCapacity);
+    }
+
     const aggregationPipeline = [
       {
         $lookup: {
@@ -214,10 +311,9 @@ exports.getAllVehicles = async (req, res) => {
             {
               $project: {
                 companyName: 1,
-                gmail: 1,
+                email: 1,
                 address: 1,
                 phNum: 1,
-                bankDetails: 1,
                 city: 1
               }
             }
@@ -225,22 +321,7 @@ exports.getAllVehicles = async (req, res) => {
         }
       },
       { $unwind: "$company" },
-      {
-        $match: {
-          isAvailable: true,
-          _id: { $nin: bookedVehicleIds },
-          ...(normalizedCity && { "company.city": normalizedCity }),
-          ...(date && { 
-            "availability.days": { 
-              $in: [new Date(date).toLocaleString('en-US', { weekday: 'long' })] 
-            } 
-          }),
-          ...(time && {
-            "availability.startTime": { $lte: time },
-            "availability.endTime": { $gte: time }
-          })
-        }
-      },
+      { $match: matchStage },
       {
         $lookup: {
           from: "bookings",
@@ -248,13 +329,20 @@ exports.getAllVehicles = async (req, res) => {
           foreignField: "idVehicle",
           as: "bookings",
           pipeline: [
-            { $match: { status: "confirmed" } }
+            { $match: { status: "completed" } }
           ]
         }
       },
       {
         $addFields: {
-          trips: { $size: "$bookings" }
+          trips: { $size: "$bookings" },
+          isInsuranceValid: { $gt: ["$insuranceExpiry", new Date()] }
+        }
+      },
+      {
+        $project: {
+          __v: 0,
+          "bookings": 0
         }
       }
     ];
@@ -263,6 +351,7 @@ exports.getAllVehicles = async (req, res) => {
 
     if (!vehicles || vehicles.length === 0) {
       return res.status(404).json({ 
+        success: false,
         message: "No available vehicles found" + 
           (city ? ` in ${city}` : '') +
           (date ? ` on ${date}` : '') +
@@ -270,22 +359,38 @@ exports.getAllVehicles = async (req, res) => {
       });
     }
 
-    return res.status(200).json(vehicles);
+    return res.status(200).json({
+      success: true,
+      count: vehicles.length,
+      data: vehicles
+    });
   } catch (error) {
     console.error("Error fetching vehicles:", error);
-    return res.status(500).json({ error: error.message });
+    return res.status(500).json({ 
+      success: false,
+      error: process.env.NODE_ENV === 'production'
+        ? 'An error occurred while fetching vehicles'
+        : error.message 
+    });
   }
 };
 
 // Get vehicle by ID (updated to include booking status)
 exports.getVehicleById = async (req, res) => {
   try {
+    const { id } = req.params;
     const { date, time } = req.query;
-    const vehicleId = req.params.id;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid vehicle ID"
+      });
+    }
 
     const aggregationPipeline = [
       {
-        $match: { _id: new mongoose.Types.ObjectId(vehicleId) }
+        $match: { _id: new mongoose.Types.ObjectId(id) }
       },
       {
         $lookup: {
@@ -297,10 +402,9 @@ exports.getVehicleById = async (req, res) => {
             {
               $project: {
                 companyName: 1,
-                gmail: 1,
+                email: 1,
                 address: 1,
                 phNum: 1,
-                bankDetails: 1,
                 city: 1
               }
             }
@@ -328,6 +432,7 @@ exports.getVehicleById = async (req, res) => {
               else: true
             }
           },
+          isInsuranceValid: { $gt: ["$insuranceExpiry", new Date()] },
           availableDates: {
             $filter: {
               input: "$availability.days",
@@ -351,20 +456,37 @@ exports.getVehicleById = async (req, res) => {
             }
           }
         }
+      },
+      {
+        $project: {
+          __v: 0,
+          "bookings": 0
+        }
       }
     ];
 
     const result = await Vehicle.aggregate(aggregationPipeline);
 
     if (!result || result.length === 0) {
-      return res.status(404).json({ message: "Vehicle not found" });
+      return res.status(404).json({
+        success: false,
+        message: "Vehicle not found"
+      });
     }
 
     const vehicle = result[0];
-    return res.status(200).json(vehicle);
+    return res.status(200).json({
+      success: true,
+      data: vehicle
+    });
   } catch (error) {
     console.error("Error fetching vehicle:", error);
-    return res.status(500).json({ error: error.message });
+    return res.status(500).json({
+      success: false,
+      error: process.env.NODE_ENV === 'production'
+        ? 'An error occurred while fetching the vehicle'
+        : error.message
+    });
   }
 };
 
@@ -634,21 +756,168 @@ exports.getManufacturers = async (req, res) => {
 // Update a vehicle
 exports.updateVehicle = async (req, res) => {
   try {
-    const vehicle = await Vehicle.findByIdAndUpdate(req.params.id, req.body, { new: true });
-    if (!vehicle) return res.status(404).json({ message: 'Vehicle not found' });
-    return res.status(200).json({ message: 'Vehicle updated successfully', vehicle });
+    const { id } = req.params;
+    const {
+      numberPlate,
+      manufacturer,
+      model,
+      year,
+      rent,
+      capacity,
+      transmission,
+      fuelType,
+      vehicleType,
+      features,
+      mileage,
+      lastServiceDate,
+      insuranceExpiry,
+      availability,
+      cities,
+      currentLocation,
+      blackoutDates,
+      minimumRentalHours,
+      maximumRentalDays,
+      isAvailable
+    } = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid vehicle ID"
+      });
+    }
+
+    // Check if vehicle exists
+    const existingVehicle = await Vehicle.findById(id);
+    if (!existingVehicle) {
+      return res.status(404).json({
+        success: false,
+        message: "Vehicle not found"
+      });
+    }
+
+    // Check for duplicate number plate if being updated
+    if (numberPlate && numberPlate !== existingVehicle.numberPlate) {
+      const duplicateVehicle = await Vehicle.findOne({ numberPlate });
+      if (duplicateVehicle) {
+        return res.status(400).json({
+          success: false,
+          message: "Vehicle with this number plate already exists"
+        });
+      }
+    }
+
+    // Handle image updates
+    let carImageUrls = existingVehicle.carImageUrls;
+    if (req.files && req.files.length > 0) {
+      for (const file of req.files) {
+        try {
+          const result = await uploadOnCloudinary(file.buffer);
+          if (result?.url) {
+            carImageUrls.push(result.url);
+          }
+        } catch (uploadError) {
+          console.error("Error uploading vehicle image:", uploadError);
+          continue;
+        }
+      }
+    }
+
+    // Prepare update object
+    const updateData = {
+      ...(numberPlate && { numberPlate: numberPlate.toUpperCase() }),
+      ...(manufacturer && { manufacturer: manufacturer.toLowerCase() }),
+      ...(model && { model: model.toLowerCase() }),
+      ...(year && { year }),
+      ...(rent && { rent }),
+      ...(capacity && { capacity }),
+      ...(transmission && { transmission }),
+      ...(fuelType && { fuelType }),
+      ...(vehicleType && { vehicleType }),
+      ...(features && { features }),
+      ...(mileage && { mileage }),
+      ...(lastServiceDate && { lastServiceDate: new Date(lastServiceDate) }),
+      ...(insuranceExpiry && { insuranceExpiry: new Date(insuranceExpiry) }),
+      ...(availability && { availability }),
+      ...(cities && { cities }),
+      ...(currentLocation && { currentLocation }),
+      ...(blackoutDates && { blackoutDates }),
+      ...(minimumRentalHours && { minimumRentalHours }),
+      ...(maximumRentalDays && { maximumRentalDays }),
+      ...(typeof isAvailable === 'boolean' && { isAvailable }),
+      carImageUrls
+    };
+
+    const updatedVehicle = await Vehicle.findByIdAndUpdate(
+      id,
+      updateData,
+      { new: true, runValidators: true }
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: "Vehicle updated successfully",
+      data: updatedVehicle
+    });
   } catch (error) {
-    return res.status(400).json({ error: error.message });
+    console.error("Error updating vehicle:", error);
+    return res.status(500).json({
+      success: false,
+      error: process.env.NODE_ENV === 'production'
+        ? 'An error occurred while updating the vehicle'
+        : error.message
+    });
   }
 };
 
 // Delete a vehicle
 exports.deleteVehicle = async (req, res) => {
   try {
-    const vehicle = await Vehicle.findByIdAndDelete(req.params.id);
-    if (!vehicle) return res.status(404).json({ message: 'Vehicle not found' });
-    return res.status(200).json({ message: 'Vehicle deleted successfully' });
+    const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid vehicle ID"
+      });
+    }
+
+    // Check if vehicle exists
+    const vehicle = await Vehicle.findById(id);
+    if (!vehicle) {
+      return res.status(404).json({
+        success: false,
+        message: "Vehicle not found"
+      });
+    }
+
+    // Check if vehicle has any active bookings
+    const activeBookings = await Booking.find({
+      idVehicle: id,
+      status: { $in: ['confirmed', 'pending'] }
+    });
+
+    if (activeBookings.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Cannot delete vehicle with active bookings"
+      });
+    }
+
+    // Delete the vehicle
+    await Vehicle.findByIdAndDelete(id);
+
+    return res.status(200).json({
+      success: true,
+      message: "Vehicle deleted successfully"
+    });
   } catch (error) {
-    return res.status(500).json({ error: error.message });
+    console.error("Error deleting vehicle:", error);
+    return res.status(500).json({
+      success: false,
+      error: process.env.NODE_ENV === 'production'
+        ? 'An error occurred while deleting the vehicle'
+        : error.message
+    });
   }
 };

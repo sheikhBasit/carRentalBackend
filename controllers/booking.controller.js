@@ -2,64 +2,227 @@ const Booking = require('../models/booking.model.js'); // Ensure the correct pat
 const mongoose = require('mongoose');
 const User = require('../models/user.model.js'); // Ensure the correct path
 const Vehicle = require('../models/vehicle.model.js'); // Ensure the correct path
+const Driver = require('../models/driver.model.js'); // Ensure the correct path
 
 const createBooking = async (req, res) => {
   try {
     console.log("Received booking request with data:", req.body);
 
-    const { user, idVehicle, ...bookingData } = req.body;
+    const { user, idVehicle, from, to, fromTime, toTime, intercity, cityName, driver, ...bookingData } = req.body;
 
     // Validate required fields
     if (!user) {
       console.log("No user ID provided in request");
-      return res.status(400).json({ error: "User ID is required" });
+      return res.status(400).json({ 
+        success: false,
+        error: "User ID is required" 
+      });
     }
 
     if (!idVehicle) {
       console.log("No vehicle ID provided in request");
-      return res.status(400).json({ error: "Vehicle ID is required" });
+      return res.status(400).json({ 
+        success: false,
+        error: "Vehicle ID is required" 
+      });
+    }
+
+    if (!from || !to || !fromTime || !toTime) {
+      return res.status(400).json({ 
+        success: false,
+        error: "From location, to location, from time, and to time are required" 
+      });
+    }
+
+    // Validate dates and times
+    const fromDateTime = new Date(`${fromTime}`);
+    const toDateTime = new Date(`${toTime}`);
+    const currentDateTime = new Date();
+
+    if (fromDateTime < currentDateTime) {
+      return res.status(400).json({ 
+        success: false,
+        error: "Start time cannot be in the past" 
+      });
+    }
+
+    if (toDateTime <= fromDateTime) {
+      return res.status(400).json({ 
+        success: false,
+        error: "End time must be after start time" 
+      });
+    }
+
+    // Validate intercity booking
+    if (intercity && !cityName) {
+      return res.status(400).json({ 
+        success: false,
+        error: "City name is required for intercity bookings" 
+      });
     }
 
     // Check if user exists
     const userExists = await User.findById(user);
     if (!userExists) {
       console.log(`User not found with ID: ${user}`);
-      return res.status(404).json({ error: "User not found" });
+      return res.status(404).json({ 
+        success: false,
+        error: "User not found" 
+      });
     }
 
     // Check if vehicle exists and is available
     const vehicle = await Vehicle.findById(idVehicle);
     if (!vehicle) {
       console.log(`Vehicle not found with ID: ${idVehicle}`);
-      return res.status(404).json({ error: "Vehicle not found" });
+      return res.status(404).json({ 
+        success: false,
+        error: "Vehicle not found" 
+      });
     }
 
     if (!vehicle.isAvailable) {
       console.log(`Vehicle with ID ${idVehicle} is not available`);
-      return res.status(400).json({ error: "Vehicle is not available for booking" });
+      return res.status(400).json({ 
+        success: false,
+        error: "Vehicle is not available for booking" 
+      });
     }
 
-    // Create the booking (but don't mark vehicle as unavailable yet)
-    const booking = new Booking({
-      ...bookingData,
-      user: user,
-      idVehicle: idVehicle
+    // Check for overlapping bookings
+    const overlappingBookings = await Booking.find({
+      idVehicle,
+      status: { $in: ['confirmed', 'pending'] },
+      $or: [
+        {
+          fromTime: { $lt: toTime },
+          toTime: { $gt: fromTime }
+        }
+      ]
     });
 
-    // Save the booking
-    await booking.save();
-    console.log("Booking created successfully with pending status:", booking);
+    if (overlappingBookings.length > 0) {
+      return res.status(400).json({ 
+        success: false,
+        error: "Vehicle is already booked for the selected time period" 
+      });
+    }
 
-    // Populate booking details for response
-    const populatedBooking = await Booking.findById(booking._id)
-      .populate("user", "name email")
-      .populate("idVehicle", "manufacturer model");
+    // If driver is provided, validate driver availability
+    let driverDoc = null;
+    if (driver) {
+      driverDoc = await Driver.findById(driver);
+      if (!driverDoc) {
+        return res.status(404).json({ 
+          success: false,
+          error: "Driver not found" 
+        });
+      }
 
-    return res.status(201).json({ 
-      success: true,
-      message: "Booking created successfully", 
-      booking: populatedBooking 
-    });
+      if (!driverDoc.isAvailable) {
+        return res.status(400).json({ 
+          success: false,
+          error: "Driver is not available" 
+        });
+      }
+
+      // Check for driver's overlapping bookings
+      const driverOverlappingBookings = await Booking.find({
+        driver,
+        status: { $in: ['confirmed', 'pending'] },
+        $or: [
+          {
+            fromTime: { $lt: toTime },
+            toTime: { $gt: fromTime }
+          }
+        ]
+      });
+
+      if (driverOverlappingBookings.length > 0) {
+        return res.status(400).json({ 
+          success: false,
+          error: "Driver is already booked for the selected time period" 
+        });
+      }
+    }
+
+    // Start a session for transaction
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+      // Create the booking
+      const booking = new Booking({
+        ...bookingData,
+        user,
+        idVehicle,
+        driver,
+        from,
+        to,
+        fromTime,
+        toTime,
+        intercity,
+        cityName: intercity ? cityName.toLowerCase() : undefined,
+        status: 'pending'
+      });
+
+      // Add booking dates to vehicle's blackout dates
+      const bookingDates = [];
+      let currentDate = new Date(fromDateTime);
+      const endDate = new Date(toDateTime);
+      
+      while (currentDate <= endDate) {
+        bookingDates.push(new Date(currentDate));
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
+
+      // Update vehicle's blackout dates
+      await Vehicle.findByIdAndUpdate(
+        idVehicle,
+        { 
+          $addToSet: { blackoutDates: { $each: bookingDates } },
+          isAvailable: false
+        },
+        { session }
+      );
+
+      // If driver is assigned, update driver's blackout dates
+      if (driverDoc) {
+        await Driver.findByIdAndUpdate(
+          driver,
+          { 
+            $addToSet: { blackoutDates: { $each: bookingDates } },
+            isAvailable: false
+          },
+          { session }
+        );
+      }
+
+      // Save the booking
+      await booking.save({ session });
+
+      // Commit the transaction
+      await session.commitTransaction();
+      session.endSession();
+
+      // Populate booking details for response
+      const populatedBooking = await Booking.findById(booking._id)
+        .populate("user", "name email")
+        .populate("idVehicle", "manufacturer model")
+        .populate("driver", "name license");
+
+      return res.status(201).json({ 
+        success: true,
+        message: "Booking created successfully", 
+        booking: populatedBooking 
+      });
+
+    } catch (error) {
+      // If any error occurs, abort the transaction
+      await session.abortTransaction();
+      session.endSession();
+      throw error;
+    }
 
   } catch (error) {
     console.error("Error creating booking:", error);
