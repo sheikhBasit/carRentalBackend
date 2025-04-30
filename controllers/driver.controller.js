@@ -61,7 +61,10 @@ exports.createDriver = async (req, res) => {
 
     // Format phone number before validation
     const formattedPhNo = phNo.replace(/\s/g, ''); // Remove any spaces
-    if (!formattedPhNo.match(/^((\+92|0)3[0-9]{2}[0-9]{7})$/)) {
+    const cleanNumber = formattedPhNo.replace(/[^\d+]/g, ''); // Remove all non-digit characters except +
+    
+    // Check if it's a valid Pakistani mobile number
+    if (!cleanNumber.match(/^((\+92|0)3[0-9]{9})$/)) {
       return res.status(400).json({
         success: false,
         error: "Invalid phone number format. Please use format: +923XX-XXXXXXX or 03XX-XXXXXXX"
@@ -124,7 +127,7 @@ exports.createDriver = async (req, res) => {
       company,
       license: license.toUpperCase(),
       cnic,
-      phNo: formattedPhNo,
+      phNo: formattedPhNo, // Keep the original format with hyphens if present
       age,
       experience,
       profileimg: profileImageUrl,
