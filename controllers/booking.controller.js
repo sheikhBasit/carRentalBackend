@@ -372,12 +372,45 @@ const cancelBooking = async (req, res) => {
     session.startTransaction();
 
     try {
+      // Generate all dates between booking.from and booking.to
+      const bookingDates = [];
+      const startDate = new Date(booking.from);
+      const endDate = new Date(booking.to);
+      
+      let currentDate = new Date(startDate);
+      while (currentDate <= endDate) {
+        bookingDates.push(new Date(currentDate));
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
+
       // Update booking status to cancelled
       booking.status = 'cancelled';
       await booking.save({ session });
 
-      // Mark vehicle as availabl
-      await vehicle.save({ session });
+      // Remove booking dates from vehicle's blackout dates
+      if (vehicle.blackoutDates && vehicle.blackoutDates.length > 0) {
+        vehicle.blackoutDates = vehicle.blackoutDates.filter(date => {
+          const dateStr = new Date(date).toISOString().split('T')[0];
+          return !bookingDates.some(bookingDate => 
+            bookingDate.toISOString().split('T')[0] === dateStr
+          );
+        });
+        await vehicle.save({ session });
+      }
+
+      // If there's a driver assigned, remove booking dates from driver's blackout dates
+      if (booking.driver) {
+        const driver = await Driver.findById(booking.driver);
+        if (driver && driver.blackoutDates && driver.blackoutDates.length > 0) {
+          driver.blackoutDates = driver.blackoutDates.filter(date => {
+            const dateStr = new Date(date).toISOString().split('T')[0];
+            return !bookingDates.some(bookingDate => 
+              bookingDate.toISOString().split('T')[0] === dateStr
+            );
+          });
+          await driver.save({ session });
+        }
+      }
 
       // Commit the transaction
       await session.commitTransaction();
