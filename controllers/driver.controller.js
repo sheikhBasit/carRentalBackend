@@ -659,3 +659,46 @@ exports.deleteDriver = async (req, res) => {
     });
   }
 };
+
+// Get available drivers for a given date (and optionally time)
+exports.getAvailableDriversByDate = async (req, res) => {
+  try {
+    const { date, time, needDriver } = req.query;
+    if (!date) {
+      return res.status(400).json({ success: false, message: 'Date is required' });
+    }
+    if (needDriver !== 'true') {
+      return res.status(200).json({ success: true, message: 'Driver not needed', data: [] });
+    }
+    const inputDate = new Date(date);
+    if (isNaN(inputDate.getTime())) {
+      return res.status(400).json({ success: false, message: 'Invalid date format' });
+    }
+    const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const dayName = daysOfWeek[inputDate.getDay()];
+
+    // Build query
+    const matchStage = {
+      'availability.days': dayName,
+      $or: [
+        { blackoutDates: { $exists: false } },
+        { blackoutDates: { $size: 0 } },
+        { blackoutDates: { $not: { $elemMatch: { $eq: inputDate.toISOString().split('T')[0] } } } }
+      ],
+      isAvailable: true
+    };
+
+    // If time is provided, filter by time window
+    let drivers = await Driver.find(matchStage);
+    if (time) {
+      drivers = drivers.filter(driver => {
+        if (!driver.availability?.startTime || !driver.availability?.endTime) return true;
+        return time >= driver.availability.startTime && time <= driver.availability.endTime;
+      });
+    }
+    return res.status(200).json({ success: true, count: drivers.length, data: drivers });
+  } catch (error) {
+    console.error('Error fetching available drivers by date:', error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+};

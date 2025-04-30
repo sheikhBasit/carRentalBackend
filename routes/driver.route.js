@@ -11,4 +11,6 @@ router.get('/:id', driverController.getDriverById);
 router.put('/:id', driverController.updateDriver);
 router.delete('/:id', driverController.deleteDriver);
 
+router.get('/availableByDate', driverController.getAvailableDriversByDate);
+
 module.exports = router;
