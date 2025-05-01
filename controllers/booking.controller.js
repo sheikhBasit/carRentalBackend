@@ -586,16 +586,59 @@ const getBookingByCompanyId = async (req, res) => {
 
 
 
-// Get a single booking by ID
+
 const getBookingById = async (req, res) => {
   try {
-    const booking = await Booking.findById(req.params.id).populate('idVehicle');
-    if (!booking) return res.status(404).json({ message: 'Booking not found' });
-    return  res.status(200).json(booking);
+    const bookingId = new mongoose.Types.ObjectId(req.params.id);
+
+    const result = await Booking.aggregate([
+      { $match: { _id: bookingId } },
+
+      // Populate Vehicle
+      {
+        $lookup: {
+          from: 'vehicles',
+          localField: 'idVehicle',
+          foreignField: '_id',
+          as: 'vehicle'
+        }
+      },
+      { $unwind: { path: '$vehicle', preserveNullAndEmptyArrays: true } },
+
+      // Populate User
+      {
+        $lookup: {
+          from: 'users',
+          localField: 'user',
+          foreignField: '_id',
+          as: 'user'
+        }
+      },
+      { $unwind: { path: '$user', preserveNullAndEmptyArrays: true } },
+
+      // Populate Driver (if applicable)
+      {
+        $lookup: {
+          from: 'drivers',
+          localField: 'driver',
+          foreignField: '_id',
+          as: 'driver'
+        }
+      },
+      { $unwind: { path: '$driver', preserveNullAndEmptyArrays: true } },
+    ]);
+
+    if (!result || result.length === 0) {
+      return res.status(404).json({ message: 'Booking not found' });
+    }
+
+    return res.status(200).json(result[0]);
   } catch (error) {
-    return  res.status(500).json({ error: error.message });
+    return res.status(500).json({ error: error.message });
   }
 };
+
+
 
 // Update a booking
 const updateBooking = async (req, res) => {
