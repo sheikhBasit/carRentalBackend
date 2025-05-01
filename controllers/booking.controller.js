@@ -441,15 +441,36 @@ const cancelBooking = async (req, res) => {
 
 const getAllBookings = async (req, res) => {
   console.log("get all bookings");
-  
-  try {
-    console.log("get all bookings");
-    const bookings = await Booking.find().populate('idVehicle'); // Populate vehicle details
-    console.log("Retrieved Bookings:", bookings);
 
+  try {
+    const bookings = await Booking.aggregate([
+      {
+        $lookup: {
+          from: 'users', // collection name in lowercase plural
+          localField: 'user',
+          foreignField: '_id',
+          as: 'user'
+        }
+      },
+      { $unwind: '$user' },
+      {
+        $lookup: {
+          from: 'vehicles',
+          localField: 'idVehicle',
+          foreignField: '_id',
+          as: 'vehicle'
+        }
+      },
+      { $unwind: '$vehicle' },
+      {
+        $sort: { createdAt: -1 } // Optional: sort by latest
+      }
+    ]);
+
+    console.log("Retrieved Bookings:", bookings);
     res.status(200).json(bookings);
   } catch (error) {
-    console.error("Error fetching bookings:", error); // Log error for debugging
+    console.error("Error fetching bookings:", error);
     res.status(500).json({ error: error.message });
   }
 };
@@ -533,8 +554,8 @@ const getBookingByUserId = async (req, res) => {
 const getBookingByCompanyId = async (req, res) => {
   try {
     const { company, status } = req.query;
-    console.log(company,status);
-    
+    console.log(company, status);
+
     if (!mongoose.Types.ObjectId.isValid(company)) {
       return res.status(400).json({ message: "Invalid company ID" });
     }
@@ -542,7 +563,7 @@ const getBookingByCompanyId = async (req, res) => {
     const bookings = await Booking.aggregate([
       {
         $match: {
-          company: new mongoose.Types.ObjectId(company), // Ensure it's an ObjectId
+          company: new mongoose.Types.ObjectId(company),
           ...(status && { status }),
         },
       },
@@ -568,15 +589,33 @@ const getBookingByCompanyId = async (req, res) => {
       {
         $unwind: {
           path: "$idVehicle",
-          preserveNullAndEmptyArrays: true, // Keep booking even if no vehicle is found
+          preserveNullAndEmptyArrays: true,
         },
       },
+      {
+        $lookup: {
+          from: "users",
+          localField: "user",
+          foreignField: "_id",
+          as: "user",
+        },
+      },
+      {
+        $unwind: {
+          path: "$user",
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+      {
+        $sort: { createdAt: -1 }, // Optional: sort by latest
+      }
     ]);
 
     if (!bookings || bookings.length === 0) {
       return res.status(404).json({ message: "No bookings for the company" });
     }
-    console.log(bookings)
+
+    console.log(bookings);
     return res.status(200).json(bookings);
   } catch (error) {
     console.error("Error fetching bookings:", error);
