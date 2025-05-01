@@ -7,11 +7,14 @@ const transactionBookingController = require('../controllers/transaction.control
 // Create new TransactionBooking
 router.post('/post', transactionBookingController.createTransactionBooking);
 
-
+// Get transaction by booking ID
 router.get('/booking/:bookingId', transactionBookingController.getTransactionByBookingId);
 
-// Get all TransactionBookings
+// Get all TransactionBookings with populated details
 router.get('/', transactionBookingController.getAllTransactionBookings);
+
+// Get detailed transaction information
+router.get('/details/:id', transactionBookingController.getTransactionDetails);
 
 // Get transactions for a specific company
 router.get('/company/:companyId', transactionBookingController.getTransactionsByCompany);

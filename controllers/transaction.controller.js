@@ -61,14 +61,109 @@ exports.createTransactionBooking = async (req, res) => {
   }
 };
 
-// Get all TransactionBookings
+// Get all TransactionBookings with populated details
 exports.getAllTransactionBookings = async (req, res) => {
   try {
-    const transactionBookings = await TransactionBooking.find().populate('bookingId');
-    return res.status(200).json(transactionBookings);
+    const transactionBookings = await TransactionBooking.aggregate([
+      {
+        $lookup: {
+          from: "bookings",
+          localField: "bookingId",
+          foreignField: "_id",
+          as: "booking",
+          pipeline: [
+            {
+              $lookup: {
+                from: "vehicles",
+                localField: "idVehicle",
+                foreignField: "_id",
+                as: "vehicle",
+                pipeline: [
+                  {
+                    $project: {
+                      manufacturer: 1,
+                      model: 1,
+                      numberPlate: 1,
+                      carImageUrls: 1,
+                      transmission: 1,
+                      capacity: 1,
+                      rent: 1
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              $lookup: {
+                from: "users",
+                localField: "user",
+                foreignField: "_id",
+                as: "user",
+                pipeline: [
+                  {
+                    $project: {
+                      name: 1,
+                      email: 1,
+                      phoneNo: 1,
+                      profilePic: 1
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              $unwind: {
+                path: "$vehicle",
+                preserveNullAndEmptyArrays: true
+              }
+            },
+            {
+              $unwind: {
+                path: "$user",
+                preserveNullAndEmptyArrays: true
+              }
+            }
+          ]
+        }
+      },
+      {
+        $unwind: {
+          path: "$booking",
+          preserveNullAndEmptyArrays: true
+        }
+      },
+      {
+        $project: {
+          _id: 1,
+          bookingId: 1,
+          amount: 1,
+          paymentStatus: 1,
+          paymentMethod: 1,
+          createdAt: 1,
+          updatedAt: 1,
+          "booking.vehicle": 1,
+          "booking.user": 1,
+          "booking.from": 1,
+          "booking.to": 1,
+          "booking.fromTime": 1,
+          "booking.toTime": 1,
+          "booking.status": 1,
+          "booking.intercity": 1,
+          "booking.cityName": 1
+        }
+      }
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      data: transactionBookings
+    });
   } catch (error) {
     console.error("Error fetching TransactionBookings:", error);
-    return res.status(500).json({ error: error.message });
+    return res.status(500).json({ 
+      success: false,
+      error: error.message 
+    });
   }
 };
 
@@ -148,5 +243,135 @@ exports.deleteTransactionBooking = async (req, res) => {
   } catch (error) {
     console.error("Error deleting TransactionBooking:", error);
     return res.status(500).json({ error: error.message });
+  }
+};
+
+// Get detailed transaction information
+exports.getTransactionDetails = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const transaction = await TransactionBooking.aggregate([
+      {
+        $match: {
+          _id: new mongoose.Types.ObjectId(id)
+        }
+      },
+      {
+        $lookup: {
+          from: "bookings",
+          localField: "bookingId",
+          foreignField: "_id",
+          as: "booking",
+          pipeline: [
+            {
+              $lookup: {
+                from: "vehicles",
+                localField: "idVehicle",
+                foreignField: "_id",
+                as: "vehicle",
+                pipeline: [
+                  {
+                    $project: {
+                      manufacturer: 1,
+                      model: 1,
+                      numberPlate: 1,
+                      carImageUrls: 1,
+                      transmission: 1,
+                      capacity: 1,
+                      rent: 1,
+                      features: 1,
+                      fuelType: 1,
+                      year: 1
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              $lookup: {
+                from: "users",
+                localField: "user",
+                foreignField: "_id",
+                as: "user",
+                pipeline: [
+                  {
+                    $project: {
+                      name: 1,
+                      email: 1,
+                      phoneNo: 1,
+                      profilePic: 1,
+                      address: 1,
+                      cnic: 1
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              $lookup: {
+                from: "drivers",
+                localField: "driver",
+                foreignField: "_id",
+                as: "driver",
+                pipeline: [
+                  {
+                    $project: {
+                      name: 1,
+                      license: 1,
+                      phNo: 1,
+                      experience: 1,
+                      profileimg: 1
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              $unwind: {
+                path: "$vehicle",
+                preserveNullAndEmptyArrays: true
+              }
+            },
+            {
+              $unwind: {
+                path: "$user",
+                preserveNullAndEmptyArrays: true
+              }
+            },
+            {
+              $unwind: {
+                path: "$driver",
+                preserveNullAndEmptyArrays: true
+              }
+            }
+          ]
+        }
+      },
+      {
+        $unwind: {
+          path: "$booking",
+          preserveNullAndEmptyArrays: true
+        }
+      }
+    ]);
+
+    if (!transaction || transaction.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Transaction not found"
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: transaction[0]
+    });
+  } catch (error) {
+    console.error("Error fetching transaction details:", error);
+    return res.status(500).json({
+      success: false,
+      error: error.message
+    });
   }
 };
