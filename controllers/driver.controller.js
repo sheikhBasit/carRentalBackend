@@ -53,42 +53,87 @@ exports.createDriver = async (req, res) => {
       experience,
       baseHourlyRate,
       baseDailyRate,
-      pricingTiers,
-      currentPromotion,
+      pricingTiers = [],
+      currentPromotion = null,
       availability,
-      blackoutDates
+      blackoutDates = []
     } = req.body;
 
-    // Format phone number before validation
-    const formattedPhNo = phNo.replace(/\s/g, ''); // Remove any spaces
-    const cleanNumber = formattedPhNo.replace(/[^\d+]/g, ''); // Remove all non-digit characters except +
+    // ========== VALIDATION SECTION ========== //
+
+    // 1. Required Fields Validation
+    const requiredFields = {
+      name: 'Full Name',
+      company: 'Company',
+      license: 'License Number',
+      cnic: 'CNIC',
+      phNo: 'Phone Number',
+      age: 'Age',
+      experience: 'Experience',
+      baseHourlyRate: 'Base Hourly Rate',
+      baseDailyRate: 'Base Daily Rate',
+      availability: 'Availability'
+    };
+
+    const missingFields = [];
+    for (const [field, fieldName] of Object.entries(requiredFields)) {
+      if (!req.body[field]) {
+        missingFields.push(fieldName);
+      }
+    }
+
+    // 2. Availability Sub-Fields Validation
+    if (availability) {
+      const requiredAvailabilityFields = {
+        days: 'Availability Days',
+        startTime: 'Availability Start Time',
+        endTime: 'Availability End Time'
+      };
+
+      for (const [field, fieldName] of Object.entries(requiredAvailabilityFields)) {
+        if (!availability[field]) {
+          missingFields.push(fieldName);
+        }
+      }
+
+      if (availability.days && !Array.isArray(availability.days)) {
+        missingFields.push('Availability Days must be an array');
+      }
+    }
+
+    if (missingFields.length > 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing or invalid required fields',
+        details: {
+          missingFields,
+          message: `The following fields are required: ${missingFields.join(', ')}`
+        }
+      });
+    }
+
+    // 3. Phone Number Validation
+    const formattedPhNo = phNo.replace(/\s/g, '');
+    const cleanNumber = formattedPhNo.replace(/[^\d+]/g, '');
     
-    // Check if it's a valid Pakistani mobile number
     if (!cleanNumber.match(/^((\+92|0)3[0-9]{9})$/)) {
       return res.status(400).json({
         success: false,
-        error: "Invalid phone number format. Please use format: +923XX-XXXXXXX or 03XX-XXXXXXX"
+        error: "Invalid phone number format",
+        details: "Please use format: +923XX-XXXXXXX or 03XX-XXXXXXX"
       });
     }
 
-    // Validate required fields
-    if (!name || !company || !license || !cnic || !formattedPhNo || !age || 
-        !experience || !baseHourlyRate || !baseDailyRate || !availability) {
-      return res.status(400).json({ 
-        success: false,
-        message: "Missing required fields" 
-      });
-    }
-
-    // Validate profile image
+    // 4. Profile Image Validation
     if (!req.files?.profileimg || req.files.profileimg.length === 0) {
       return res.status(400).json({ 
         success: false,
-        message: "Profile image is required" 
+        error: "Profile image is required",
+        details: "Please upload a profile image"
       });
     }
 
-    // Check for existing driver with same license or CNIC
+    // 5. Duplicate Check Validation
     const existingDriver = await Driver.findOne({
       $or: [
         { license: license.toUpperCase() },
@@ -97,13 +142,23 @@ exports.createDriver = async (req, res) => {
     });
 
     if (existingDriver) {
-      return res.status(400).json({
+      const conflictFields = [];
+      if (existingDriver.license === license.toUpperCase()) conflictFields.push('License Number');
+      if (existingDriver.cnic === cnic) conflictFields.push('CNIC');
+
+      return res.status(409).json({
         success: false,
-        message: "Driver with this license or CNIC already exists"
+        error: "Driver already exists",
+        details: {
+          conflictFields,
+          message: `Driver with this ${conflictFields.join(' and ')} already exists`
+        }
       });
     }
 
-    // Upload profile image
+    // ========== PROCESSING SECTION ========== //
+
+    // 1. Upload Profile Image
     const profileImage = req.files.profileimg[0];
     let profileImageUrl;
     
@@ -117,51 +172,70 @@ exports.createDriver = async (req, res) => {
       console.error("Error uploading driver image:", uploadError);
       return res.status(500).json({ 
         success: false,
-        message: "Profile image upload failed" 
+        error: "Profile image upload failed",
+        details: "Please try again or contact support"
       });
     }
 
-    // Create new driver
+    // 2. Create Driver Document
     const driver = new Driver({
       name,
       company,
       license: license.toUpperCase(),
       cnic,
-      phNo: formattedPhNo, // Keep the original format with hyphens if present
-      age,
-      experience,
+      phNo: formattedPhNo,
+      age: Number(age),
+      experience: Number(experience),
       profileimg: profileImageUrl,
-      baseHourlyRate,
-      baseDailyRate,
-      pricingTiers: pricingTiers || [],
-      currentPromotion: currentPromotion || null,
+      baseHourlyRate: Number(baseHourlyRate),
+      baseDailyRate: Number(baseDailyRate),
+      pricingTiers,
+      currentPromotion,
       availability,
-      blackoutDates: blackoutDates || [],
+      blackoutDates,
     });
 
+    // 3. Save to Database
     await driver.save();
 
+    // ========== RESPONSE SECTION ========== //
     return res.status(201).json({
       success: true,
       message: "Driver created successfully",
       data: {
-        ...driver.toObject(),
+        ...driver.toObject({ virtuals: true }),
         __v: undefined
       }
     });
+
   } catch (error) {
     console.error("Error creating driver:", error);
     
-    const statusCode = error.name === 'ValidationError' ? 400 : 500;
+    // Handle different error types appropriately
+    let statusCode = 500;
+    let errorMessage = 'An error occurred while creating the driver';
+    let errorDetails = null;
+
+    if (error.name === 'ValidationError') {
+      statusCode = 400;
+      errorMessage = 'Validation failed';
+      errorDetails = Object.values(error.errors).map(err => err.message);
+    } else if (error.name === 'MongoError' && error.code === 11000) {
+      statusCode = 409;
+      errorMessage = 'Duplicate key error';
+      errorDetails = 'A driver with these details already exists';
+    }
+
     return res.status(statusCode).json({ 
       success: false,
-      error: process.env.NODE_ENV === 'production'
-        ? 'An error occurred while creating the driver'
-        : error.message 
+      error: errorMessage,
+      details: process.env.NODE_ENV === 'development' ? {
+        message: error.message,
+        stack: error.stack
+      } : errorDetails
     });
   }
 };
-
 exports.getAllDrivers = async (req, res) => {
   try {
     const {
