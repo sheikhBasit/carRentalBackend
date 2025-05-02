@@ -12,6 +12,9 @@ const app = express();
 // ====================== CORS Configuration ======================
 const allowedOrigins = [
   'http://localhost:5173',
+  'http://localhost:5174',
+  'http://localhost:5175',
+  'http://localhost:5176',
   'http://localhost:3000',
   'capacitor://localhost',
   'http://10.0.2.2',
