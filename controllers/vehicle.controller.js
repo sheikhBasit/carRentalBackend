@@ -766,9 +766,10 @@ exports.updateVehicle = async (req, res) => {
       blackoutDates,
       minimumRentalHours,
       maximumRentalDays,
-      removeImages // Add this field to specify images to remove
+      removeImages
     } = req.body;
 
+    // Validate vehicle ID
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({
         success: false,
@@ -785,7 +786,7 @@ exports.updateVehicle = async (req, res) => {
       });
     }
 
-    // Check for duplicate number plate if being updated
+    // Check for duplicate number plate
     if (numberPlate && numberPlate !== existingVehicle.numberPlate) {
       const duplicateVehicle = await Vehicle.findOne({ numberPlate });
       if (duplicateVehicle) {
@@ -796,20 +797,17 @@ exports.updateVehicle = async (req, res) => {
       }
     }
 
-    // Handle image updates - improved version
+    // Handle image updates
     let carImageUrls = [...existingVehicle.carImageUrls];
     
-    // Remove specified images if any
+    // Remove specified images
     if (removeImages && Array.isArray(removeImages)) {
       carImageUrls = carImageUrls.filter(url => !removeImages.includes(url));
     }
     
-    // Add new images if any
+    // Add new images
     if (req.files && req.files.length > 0) {
-      // First delete all existing images if we want to replace them completely
-      // Or you can implement logic to keep some and replace others
-      // Here we'll assume new files should replace all existing images
-      carImageUrls = [];
+      carImageUrls = carImageUrls.length === 0 ? [] : carImageUrls;
       
       for (const file of req.files) {
         try {
@@ -824,7 +822,7 @@ exports.updateVehicle = async (req, res) => {
       }
     }
 
-    // Validate we have at least one image (if that's a requirement)
+    // Validate at least one image exists
     if (carImageUrls.length === 0) {
       return res.status(400).json({
         success: false,
@@ -832,7 +830,25 @@ exports.updateVehicle = async (req, res) => {
       });
     }
 
-    // Prepare update object
+    // Filter out past blackout dates
+    const currentDate = new Date();
+    let filteredBlackoutDates = [];
+    let pastDatesCount = 0;
+    
+    if (blackoutDates && Array.isArray(blackoutDates)) {
+      filteredBlackoutDates = blackoutDates.filter(date => {
+        const dateObj = new Date(date);
+        if (dateObj > currentDate) {
+          return true;
+        }
+        pastDatesCount++;
+        return false;
+      });
+    } else {
+      filteredBlackoutDates = existingVehicle.blackoutDates || [];
+    }
+
+    // Prepare update data
     const updateData = {
       ...(numberPlate && { numberPlate: numberPlate.toUpperCase() }),
       ...(manufacturer && { manufacturer: manufacturer.toLowerCase() }),
@@ -850,39 +866,57 @@ exports.updateVehicle = async (req, res) => {
       ...(availability && { availability }),
       ...(cities && { cities }),
       ...(currentLocation && { currentLocation }),
-      ...(blackoutDates && { blackoutDates }),
+      blackoutDates: filteredBlackoutDates,
       ...(minimumRentalHours && { minimumRentalHours }),
       ...(maximumRentalDays && { maximumRentalDays }),
       carImageUrls
     };
 
+    // Update vehicle
     const updatedVehicle = await Vehicle.findByIdAndUpdate(
       id,
       updateData,
       { new: true, runValidators: true }
     );
 
-    return res.status(200).json({
+    // Prepare response
+    const response = {
       success: true,
       message: "Vehicle updated successfully",
       data: updatedVehicle
-    });
+    };
+
+    // Add warning if past dates were filtered
+    if (pastDatesCount > 0) {
+      response.warning = `${pastDatesCount} past blackout dates were removed`;
+    }
+
+    return res.status(200).json(response);
+
   } catch (error) {
     console.error("Error updating vehicle:", error);
     return res.status(500).json({
       success: false,
       error: process.env.NODE_ENV === 'production'
         ? 'An error occurred while updating the vehicle'
-        : error.message
+        : error.message,
+      ...(process.env.NODE_ENV !== 'production' && {
+        stack: error.stack
+      })
     });
   }
 };
 // Delete a vehicle
 exports.deleteVehicle = async (req, res) => {
   try {
+    console.log("Deleting vehicle");
+    console.log(req.params);
+
     const { id } = req.params;
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
+      console.log("Invalid vehicle ID");
+      console.log(id);
       return res.status(400).json({
         success: false,
         message: "Invalid vehicle ID"
@@ -905,6 +939,8 @@ exports.deleteVehicle = async (req, res) => {
     });
 
     if (activeBookings.length > 0) {
+      console.log("Vehicle has active bookings");
+      console.log(activeBookings);
       return res.status(400).json({
         success: false,
         message: "Cannot delete vehicle with active bookings"
