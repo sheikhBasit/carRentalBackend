@@ -621,14 +621,12 @@ exports.updateDriver = async (req, res) => {
 exports.deleteDriver = async (req, res) => {
   try {
     const { id } = req.params;
-
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({
         success: false,
         message: "Invalid driver ID"
       });
     }
-
     // Check if driver exists
     const driver = await Driver.findById(id);
     if (!driver) {
@@ -637,7 +635,6 @@ exports.deleteDriver = async (req, res) => {
         message: "Driver not found"
       });
     }
-
     // Check if driver has any active assignments
     if (driver.currentAssignment && driver.currentAssignment.endTime > new Date()) {
       return res.status(400).json({
@@ -645,23 +642,20 @@ exports.deleteDriver = async (req, res) => {
         message: "Cannot delete driver with active assignment"
       });
     }
-
     // Check if driver has any active bookings
     const activeBookings = await Booking.find({
       driver: id,
-      status: { $in: ['confirmed', 'pending'] }
+      status: { $in: ['pending', 'confirmed', 'ongoing'] }
     });
-
     if (activeBookings.length > 0) {
       return res.status(400).json({
         success: false,
-        message: "Cannot delete driver with active bookings"
+        message: "Cannot delete driver with active bookings",
+        activeBookingsCount: activeBookings.length
       });
     }
-
     // Delete the driver
     await Driver.findByIdAndDelete(id);
-
     return res.status(200).json({
       success: true,
       message: "Driver deleted successfully"

@@ -1,0 +1,250 @@
+openapi: 3.0.3
+info:
+  title: Car Rental System API
+  version: 1.0.0
+  description: |
+    Comprehensive API documentation for the Car Rental System backend, covering user, vehicle, booking, and admin flows.
+servers:
+  - url: http://localhost:5000/api
+paths:
+  /user/create:
+    post:
+      summary: Register a new user
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                email:
+                  type: string
+                password:
+                  type: string
+                phone:
+                  type: string
+                cnicFront:
+                  type: string
+                  format: binary
+                cnicBack:
+                  type: string
+                  format: binary
+                licenseFront:
+                  type: string
+                  format: binary
+                licenseBack:
+                  type: string
+                  format: binary
+                profilePicture:
+                  type: string
+                  format: binary
+      responses:
+        '201':
+          description: User registered successfully
+        '400':
+          description: Invalid input
+  /user/login:
+    post:
+      summary: User login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                password:
+                  type: string
+      responses:
+        '200':
+          description: Login successful
+        '401':
+          description: Invalid credentials
+  /vehicle/postVehicle:
+    post:
+      summary: Add a new vehicle (company/admin)
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                companyId:
+                  type: string
+                manufacturer:
+                  type: string
+                model:
+                  type: string
+                year:
+                  type: integer
+                numberPlate:
+                  type: string
+                carImages:
+                  type: array
+                  items:
+                    type: string
+                    format: binary
+                availability:
+                  type: object
+                  properties:
+                    days:
+                      type: array
+                      items:
+                        type: string
+                    startTime:
+                      type: string
+                    endTime:
+                      type: string
+                cities:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      name:
+                        type: string
+                      additionalFee:
+                        type: number
+      responses:
+        '201':
+          description: Vehicle added
+        '400':
+          description: Invalid input
+  /vehicle/search:
+    get:
+      summary: Search/filter vehicles
+      parameters:
+        - in: query
+          name: status
+          schema:
+            type: string
+        - in: query
+          name: minPrice
+          schema:
+            type: number
+        - in: query
+          name: maxPrice
+          schema:
+            type: number
+        - in: query
+          name: features
+          schema:
+            type: string
+        - in: query
+          name: seats
+          schema:
+            type: integer
+        - in: query
+          name: fuelType
+          schema:
+            type: string
+        - in: query
+          name: transmission
+          schema:
+            type: string
+        - in: query
+          name: city
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of vehicles
+  /booking/postBooking:
+    post:
+      summary: Create a booking
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                user:
+                  type: string
+                idVehicle:
+                  type: string
+                from:
+                  type: string
+                to:
+                  type: string
+                fromTime:
+                  type: string
+                toTime:
+                  type: string
+                intercity:
+                  type: boolean
+                cityName:
+                  type: string
+                driver:
+                  type: string
+                termsAccepted:
+                  type: boolean
+                paymentStatus:
+                  type: string
+                promoCode:
+                  type: string
+                bookingChannel:
+                  type: string
+      responses:
+        '201':
+          description: Booking created
+        '400':
+          description: Invalid input
+  /booking/cancelBooking/{id}:
+    patch:
+      summary: Cancel a booking
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                user:
+                  type: string
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: Booking cancelled
+        '404':
+          description: Booking not found
+  /booking/completeBooking/{id}:
+    patch:
+      summary: Complete a booking
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                user:
+                  type: string
+                feedbackId:
+                  type: string
+                damageReportIds:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        '200':
+          description: Booking completed
+        '404':
+          description: Booking not found

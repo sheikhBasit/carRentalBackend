@@ -267,7 +267,17 @@ exports.updateUser = async (req, res) => {
 // Delete a user
 exports.deleteUser = async (req, res) => {
   try {
-    const user = await User.findByIdAndDelete(req.params.id);
+    const userId = req.params.id;
+    // Check for active bookings
+    const Booking = require('../models/booking.model.js');
+    const activeBookings = await Booking.find({ user: userId, status: { $in: ['pending', 'confirmed', 'ongoing'] } });
+    if (activeBookings.length > 0) {
+      return res.status(400).json({
+        message: 'Cannot delete user with active bookings',
+        activeBookingsCount: activeBookings.length
+      });
+    }
+    const user = await User.findByIdAndDelete(userId);
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
@@ -555,5 +565,92 @@ exports.removePaymentMethod = async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ message: 'Error removing payment method', error: error.message });
+  }
+};
+
+// --- RBAC: Change User Role (admin only) ---
+exports.changeUserRole = async (req, res) => {
+  try {
+    if (!req.user || req.user.role !== 'admin') {
+      return res.status(403).json({ message: 'Forbidden: Admins only' });
+    }
+    const { userId } = req.params;
+    const { role } = req.body;
+    if (!['customer', 'company', 'admin'].includes(role)) {
+      return res.status(400).json({ message: 'Invalid role' });
+    }
+    const user = await User.findByIdAndUpdate(userId, { role }, { new: true });
+    if (!user) return res.status(404).json({ message: 'User not found' });
+    // TODO: Add audit log
+    res.json({ message: 'Role updated', user });
+  } catch (err) {
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+};
+
+// --- Admin: Block/Unblock User ---
+exports.setUserBlocked = async (req, res) => {
+  try {
+    if (!req.user || req.user.role !== 'admin') {
+      return res.status(403).json({ message: 'Forbidden: Admins only' });
+    }
+    const { userId } = req.params;
+    const { isBlocked } = req.body;
+    const user = await User.findByIdAndUpdate(userId, { isBlocked }, { new: true });
+    if (!user) return res.status(404).json({ message: 'User not found' });
+    // TODO: Add audit log
+    res.json({ message: `User ${isBlocked ? 'blocked' : 'unblocked'}`, user });
+  } catch (err) {
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+};
+
+// --- Update Notification Preferences ---
+exports.updateNotificationPreferences = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { email, sms, push } = req.body;
+    const user = await User.findByIdAndUpdate(
+      userId,
+      { notificationPreferences: { email, sms, push } },
+      { new: true }
+    );
+    if (!user) return res.status(404).json({ message: 'User not found' });
+    res.json({ message: 'Notification preferences updated', user });
+  } catch (err) {
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+};
+
+// --- Toggle Two-Factor Auth ---
+exports.toggleTwoFactor = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { enabled } = req.body;
+    const user = await User.findByIdAndUpdate(userId, { twoFactorEnabled: enabled }, { new: true });
+    if (!user) return res.status(404).json({ message: 'User not found' });
+    res.json({ message: `Two-factor auth ${enabled ? 'enabled' : 'disabled'}`, user });
+  } catch (err) {
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+};
+
+// --- Admin/Company: Verify CNIC/License ---
+exports.verifyUserDocument = async (req, res) => {
+  try {
+    if (!req.user || !['admin', 'company'].includes(req.user.role)) {
+      return res.status(403).json({ message: 'Forbidden: Admins/Companies only' });
+    }
+    const { userId } = req.params;
+    const { cnicVerified, licenseVerified } = req.body;
+    const update = {};
+    if (typeof cnicVerified === 'boolean') update.cnicVerified = cnicVerified;
+    if (typeof licenseVerified === 'boolean') update.licenseVerified = licenseVerified;
+    const user = await User.findByIdAndUpdate(userId, update, { new: true });
+    if (!user) return res.status(404).json({ message: 'User not found' });
+    // TODO: Add audit log
+    res.json({ message: 'User document verification updated', user });
+  } catch (err) {
+    res.status(500).json({ message: 'Server error', error: err.message });
   }
 };

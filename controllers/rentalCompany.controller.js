@@ -223,7 +223,22 @@ exports.updateRentalCompany = async (req, res) => {
 // Delete a rental company
 exports.deleteRentalCompany = async (req, res) => {
   try {
-    const company = await RentalCompany.findByIdAndDelete(req.params.id);
+    const companyId = req.params.id;
+    // Check for active bookings for any vehicles owned by this company
+    const Vehicle = require('../models/vehicle.model.js');
+    const Booking = require('../models/booking.model.js');
+    // Find all vehicles owned by this company
+    const vehicles = await Vehicle.find({ company: companyId }, '_id');
+    const vehicleIds = vehicles.map(v => v._id);
+    // Check for active bookings for any of these vehicles
+    const activeBookings = await Booking.find({ idVehicle: { $in: vehicleIds }, status: { $in: ['pending', 'confirmed', 'ongoing'] } });
+    if (activeBookings.length > 0) {
+      return res.status(400).json({
+        message: 'Cannot delete rental company with active bookings for its vehicles',
+        activeBookingsCount: activeBookings.length
+      });
+    }
+    const company = await RentalCompany.findByIdAndDelete(companyId);
     if (!company) return res.status(404).json({ message: 'Rental company not found' });
     return res.status(200).json({ message: 'Rental company deleted successfully' });
   } catch (error) {

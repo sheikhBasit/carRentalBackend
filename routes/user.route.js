@@ -51,13 +51,29 @@ router.post('/reset-password/:token', userController.resetPassword);
 // Check authentication
 router.get('/check-auth', userController.checkAuth);
 
+// --- RBAC, Admin, Company, User Management Extensions ---
+const {
+  changeUserRole,
+  setUserBlocked,
+  updateNotificationPreferences,
+  toggleTwoFactor,
+  verifyUserDocument
+} = require('../controllers/user.controller.js');
+
+// Change user role (admin only)
+router.patch('/:userId/role', changeUserRole);
+// Block/unblock user (admin only)
+router.patch('/:userId/block', setUserBlocked);
+// Update notification preferences
+router.patch('/:userId/notification-preferences', updateNotificationPreferences);
+// Toggle two-factor auth
+router.patch('/:userId/two-factor', toggleTwoFactor);
+// Verify CNIC/license (admin/company)
+router.patch('/:userId/verify-doc', verifyUserDocument);
 
 router.post('/:userId/payment-methods', userController.addPaymentMethod);
 router.get('/:userId/payment-methods', userController.getPaymentMethods);
 router.patch('/:userId/payment-methods/:paymentMethodId/set-default', userController.setDefaultPaymentMethod);
 router.delete('/:userId/payment-methods/:paymentMethodId', userController.removePaymentMethod);
-
-
-
 
 module.exports = router;

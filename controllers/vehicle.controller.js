@@ -68,8 +68,7 @@ exports.deleteAllVehicles = async (req, res) => {
 //         if (carImageUrl) {
 //           carImageUrls.push(carImageUrl.url);
 //         }
-//       }
-//     }
+    //   }
 
 //     if (carImageUrls.length === 0) {
 //       return res.status(400).json({ message: "At least one car image is required" });
@@ -906,23 +905,127 @@ exports.updateVehicle = async (req, res) => {
     });
   }
 };
+
+// Update vehicle status
+exports.setVehicleStatus = async (req, res) => {
+  try {
+    // RBAC: Only admin or owning company can update status
+    const { id } = req.params;
+    const { status } = req.body;
+    if (!['available', 'booked', 'under_maintenance', 'inactive'].includes(status)) {
+      return res.status(400).json({ success: false, error: 'Invalid status' });
+    }
+    const vehicle = await Vehicle.findByIdAndUpdate(id, { status }, { new: true });
+    if (!vehicle) return res.status(404).json({ success: false, error: 'Vehicle not found' });
+    // TODO: Add audit log
+    res.json({ success: true, message: 'Status updated', vehicle });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+};
+
+// Log maintenance event
+exports.logMaintenance = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { date, description, cost } = req.body;
+    const vehicle = await Vehicle.findById(id);
+    if (!vehicle) return res.status(404).json({ success: false, error: 'Vehicle not found' });
+    vehicle.maintenanceLogs.push({ date, description, cost });
+    await vehicle.save();
+    // TODO: Add audit log
+    res.json({ success: true, message: 'Maintenance log added', vehicle });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+};
+
+// Update Dynamic Pricing & Discount (admin/company only)
+exports.updatePricing = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { dynamicPricing, discount } = req.body;
+    const vehicle = await Vehicle.findByIdAndUpdate(id, { dynamicPricing, discount }, { new: true });
+    if (!vehicle) return res.status(404).json({ success: false, error: 'Vehicle not found' });
+    // TODO: Add audit log
+    res.json({ success: true, message: 'Pricing updated', vehicle });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+};
+
+// Soft Delete/Restore Vehicle (admin/company only)
+exports.softDeleteVehicle = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { isDeleted } = req.body;
+    const vehicle = await Vehicle.findByIdAndUpdate(id, { isDeleted }, { new: true });
+    if (!vehicle) return res.status(404).json({ success: false, error: 'Vehicle not found' });
+    // TODO: Add audit log
+    res.json({ success: true, message: `Vehicle ${isDeleted ? 'archived' : 'restored'}`, vehicle });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+};
+
+// Upload Vehicle Images (admin/company only)
+exports.uploadVehicleImages = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ success: false, error: 'No images uploaded' });
+    }
+    const urls = [];
+    for (const file of req.files) {
+      const result = await uploadOnCloudinary(file.buffer);
+      if (result?.url) urls.push(result.url);
+    }
+    const vehicle = await Vehicle.findByIdAndUpdate(id, { $push: { images: { $each: urls } } }, { new: true });
+    if (!vehicle) return res.status(404).json({ success: false, error: 'Vehicle not found' });
+    // TODO: Add audit log
+    res.json({ success: true, message: 'Images uploaded', vehicle });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+};
+
+// Search/Filter Vehicles (public)
+exports.searchVehicles = async (req, res) => {
+  try {
+    const query = {};
+    const { status, minPrice, maxPrice, features, seats, fuelType, transmission, city } = req.query;
+    if (status) query.status = status;
+    if (typeof seats !== 'undefined') query['features.seats'] = Number(seats);
+    if (fuelType) query['features.fuelType'] = fuelType;
+    if (transmission) query['features.transmission'] = transmission;
+    if (city) query['cities.name'] = city;
+    if (features) {
+      // features=ac,bluetooth,gps
+      const arr = features.split(',');
+      arr.forEach(f => query[`features.${f}`] = true);
+    }
+    if (minPrice || maxPrice) {
+      query['dynamicPricing.baseRate'] = {};
+      if (minPrice) query['dynamicPricing.baseRate'].$gte = Number(minPrice);
+      if (maxPrice) query['dynamicPricing.baseRate'].$lte = Number(maxPrice);
+    }
+    const vehicles = await Vehicle.find(query);
+    res.json({ success: true, vehicles });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+};
+
 // Delete a vehicle
 exports.deleteVehicle = async (req, res) => {
   try {
-    console.log("Deleting vehicle");
-    console.log(req.params);
-
     const { id } = req.params;
-
     if (!mongoose.Types.ObjectId.isValid(id)) {
-      console.log("Invalid vehicle ID");
-      console.log(id);
       return res.status(400).json({
         success: false,
         message: "Invalid vehicle ID"
       });
     }
-
     // Check if vehicle exists
     const vehicle = await Vehicle.findById(id);
     if (!vehicle) {
@@ -931,25 +1034,16 @@ exports.deleteVehicle = async (req, res) => {
         message: "Vehicle not found"
       });
     }
-
-    // Check if vehicle has any active bookings
-    const activeBookings = await Booking.find({
-      idVehicle: id,
-      status: { $in: ['confirmed', 'pending'] }
-    });
-
+    // Check for active bookings
+    const activeBookings = await Booking.find({ idVehicle: id, status: { $in: ['pending', 'confirmed', 'ongoing'] } });
     if (activeBookings.length > 0) {
-      console.log("Vehicle has active bookings");
-      console.log(activeBookings);
       return res.status(400).json({
         success: false,
         message: "Cannot delete vehicle with active bookings"
       });
     }
-
     // Delete the vehicle
     await Vehicle.findByIdAndDelete(id);
-
     return res.status(200).json({
       success: true,
       message: "Vehicle deleted successfully"

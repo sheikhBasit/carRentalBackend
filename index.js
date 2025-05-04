@@ -114,6 +114,9 @@ const commentRoutes = require('./routes/commentRoutes');
 const likeRoutes = require('./routes/likeRoutes');
 const stripeRoute = require('./routes/payment.route');
 const transactionBookingRoutes = require('./routes/transaction.route');
+const damageReportRoutes = require('./routes/damagereport.route');
+const analyticsRoutes = require('./routes/analytics.route');
+const notificationRoutes = require('./routes/notification.route');
 
 app.use('/users', userRoutes);
 app.use('/bookings', bookingRoutes);
@@ -125,6 +128,9 @@ app.use('/comment', commentRoutes);
 app.use('/likes', likeRoutes);
 app.use('/stripe', stripeRoute);
 app.use('/transaction', transactionBookingRoutes);
+app.use('/damagereport', damageReportRoutes);
+app.use('/api/analytics', analyticsRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // Health check endpoint
 app.get('/', (req, res) => {
@@ -209,6 +215,7 @@ app.use((err, req, res, next) => {
 
 // ====================== Server Setup ======================
 const PORT = process.env.PORT || 5000;
+require('./scheduledNotifications');
 const server = app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });

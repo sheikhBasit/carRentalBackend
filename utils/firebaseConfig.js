@@ -53,7 +53,7 @@ router.post("/send-fcm-notification", async (req, res) => {
           title,
           body: message,
         },
-        token: company.fcmToken,
+        token: user.fcmToken, // Fix: changed company.fcmToken to user.fcmToken
       };
   
       await admin.messaging().send(payload);
@@ -64,12 +64,35 @@ router.post("/send-fcm-notification", async (req, res) => {
     }
   });
   
-//   module.exports = router;
-  
-  
-
-module.exports = {
-    messaging: messaging,
-    router: router,
+// Utility function to send FCM notification to a user
+async function sendUserPushNotification(userId, title, message) {
+  const user = await User.findById(userId);
+  if (!user || !user.fcmToken) return;
+  const payload = {
+    notification: { title, body: message },
+    token: user.fcmToken,
+  };
+  try {
+    await admin.messaging().send(payload);
+    console.log('Push notification sent to user:', user.email || userId);
+  } catch (err) {
+    console.error('Error sending push notification to user:', err);
+  }
+}
+// Utility function to send FCM notification to a company
+async function sendCompanyPushNotification(companyId, title, message) {
+  const company = await RentalCompany.findById(companyId);
+  if (!company || !company.fcmToken) return;
+  const payload = {
+    notification: { title, body: message },
+    token: company.fcmToken,
+  };
+  try {
+    await admin.messaging().send(payload);
+    console.log('Push notification sent to company:', company.email || companyId);
+  } catch (err) {
+    console.error('Error sending push notification to company:', err);
+  }
 }
 
+module.exports = { admin, messaging, sendUserPushNotification, sendCompanyPushNotification, router };

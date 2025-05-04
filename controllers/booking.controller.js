@@ -3,234 +3,248 @@ const mongoose = require('mongoose');
 const User = require('../models/user.model.js'); // Ensure the correct path
 const Vehicle = require('../models/vehicle.model.js'); // Ensure the correct path
 const Driver = require('../models/driver.model.js'); // Ensure the correct path
+const RentalCompany = require('../models/rentalcompany.model');
+const {sendBookingConfirmationEmail} = require('../mailtrap/email');
+const { sendUserPushNotification, sendCompanyPushNotification } = require('../utils/firebaseConfig');
 
+// --- ENFORCE BUFFER TIME, PAYMENT, CANCELLATION, AUDIT LOGIC ---
+const checkBufferTime = async (vehicleId, fromTime, toTime) => {
+  const bookings = await Booking.find({ idVehicle: vehicleId, status: { $in: ['pending', 'confirmed', 'ongoing'] } });
+  const newStart = new Date(fromTime);
+  const newEnd = new Date(toTime);
+  for (const b of bookings) {
+    const existingStart = new Date(b.fromTime);
+    const existingEnd = new Date(b.toTime);
+    if (
+      (newStart < existingEnd && newEnd > existingStart) ||
+      Math.abs(newStart - existingEnd) < (b.bufferMinutes || 120) * 60 * 1000
+    ) {
+      return false;
+    }
+  }
+  return true;
+};
+
+// --- Atomic Booking Creation with Buffer, Payment, Promo, Price, Audit, Channel ---
 const createBooking = async (req, res) => {
   try {
-    console.log("Received booking request with data:", req.body);
+    const { user, idVehicle, from, to, fromTime, toTime, intercity, cityName, driver, termsAccepted, paymentStatus, promoCode, bookingChannel, ...bookingData } = req.body;
 
-    const { user, idVehicle, from, to, fromTime, toTime, intercity, cityName, driver, ...bookingData } = req.body;
-
-    // Validate required fields
-    if (!user) {
-      console.log("No user ID provided in request");
-      return res.status(400).json({ 
-        success: false,
-        error: "User ID is required" 
-      });
+    // Validate required fields (as before)
+    if (!user || !idVehicle || !from || !to || !fromTime || !toTime) {
+      return res.status(400).json({ success: false, error: "Missing required fields" });
     }
 
-    if (!idVehicle) {
-      console.log("No vehicle ID provided in request");
-      return res.status(400).json({ 
-        success: false,
-        error: "Vehicle ID is required" 
-      });
+    // Validate user and vehicle
+    const userDoc = await User.findById(user);
+    if (!userDoc || userDoc.isBlocked) {
+      return res.status(403).json({ success: false, error: "User not found or blocked" });
+    }
+    const vehicleDoc = await Vehicle.findById(idVehicle);
+    if (!vehicleDoc || vehicleDoc.status !== 'available' || vehicleDoc.isDeleted) {
+      return res.status(403).json({ success: false, error: "Vehicle not available" });
     }
 
-    if (!from || !to || !fromTime || !toTime) {
-      return res.status(400).json({ 
-        success: false,
-        error: "From location, to location, from time, and to time are required" 
-      });
+    // Buffer time and double-booking prevention
+    const bufferOk = await checkBufferTime(idVehicle, fromTime, toTime);
+    if (!bufferOk) {
+      return res.status(409).json({ success: false, error: 'Vehicle is not available for the selected time (buffer conflict).' });
     }
 
-    // Validate dates and times
-    const fromDateTime = new Date(`${from}T${fromTime}`);
-    const toDateTime = new Date(`${to}T${toTime}`);
-    const currentDateTime = new Date();
-
-    if (fromDateTime < currentDateTime) {
-      return res.status(400).json({ 
-        success: false,
-        error: "Start time cannot be in the past" 
-      });
+    // Payment must be pending or paid
+    if (!['pending', 'paid'].includes(paymentStatus)) {
+      return res.status(400).json({ success: false, error: "Invalid payment status" });
     }
 
-    if (toDateTime <= fromDateTime) {
-      return res.status(400).json({ 
-        success: false,
-        error: "End time must be after start time" 
-      });
+    // Terms acceptance
+    if (!termsAccepted) {
+      return res.status(400).json({ success: false, error: "Terms and conditions must be accepted" });
     }
 
-    // Validate intercity booking
-    if (intercity && !cityName) {
-      return res.status(400).json({ 
-        success: false,
-        error: "City name is required for intercity bookings" 
-      });
+    // Price calculation (base, discount, tax, total)
+    let base = vehicleDoc.dynamicPricing?.baseRate || 0;
+    let discount = 0;
+    let tax = 0;
+    let total = base;
+    if (vehicleDoc.discount && vehicleDoc.discount.percent && vehicleDoc.discount.validUntil > new Date()) {
+      discount = (base * vehicleDoc.discount.percent) / 100;
+      total -= discount;
     }
-
-    // Check if user exists
-    const userExists = await User.findById(user);
-    if (!userExists) {
-      console.log(`User not found with ID: ${user}`);
-      return res.status(404).json({ 
-        success: false,
-        error: "User not found" 
-      });
+    // Promo code logic (stub, can be expanded)
+    if (promoCode === 'PAKISTAN10') {
+      discount += base * 0.10;
+      total -= base * 0.10;
     }
+    // Tax (e.g., 16%)
+    tax = total * 0.16;
+    total += tax;
 
-    // Check if vehicle exists
-    const vehicle = await Vehicle.findById(idVehicle);
-    if (!vehicle) {
-      console.log(`Vehicle not found with ID: ${idVehicle}`);
-      return res.status(404).json({ 
-        success: false,
-        error: "Vehicle not found" 
-      });
-    }
-
-    // Check vehicle blackout dates
-    if (vehicle.blackoutDates && vehicle.blackoutDates.length > 0) {
-      const bookingDates = [];
-      let currentDate = new Date(fromDateTime);
-      const endDate = new Date(toDateTime);
-      
-      while (currentDate <= endDate) {
-        bookingDates.push(currentDate.toISOString().split('T')[0]);
-        currentDate.setDate(currentDate.getDate() + 1);
-      }
-
-      const blackoutDates = vehicle.blackoutDates.map(date => 
-        new Date(date).toISOString().split('T')[0]
-      );
-
-      const hasBlackoutDate = bookingDates.some(date => blackoutDates.includes(date));
-      if (hasBlackoutDate) {
-        return res.status(400).json({ 
-          success: false,
-          error: "Vehicle is not available for the selected dates" 
-        });
-      }
-    }
-
-    // If driver is provided, check driver availability and blackout dates
-    let driverDoc = null;
-    if (driver) {
-      driverDoc = await Driver.findById(driver);
-      if (!driverDoc) {
-        return res.status(404).json({ 
-          success: false,
-          error: "Driver not found" 
-        });
-      }
-
-      // Check driver blackout dates
-      if (driverDoc.blackoutDates && driverDoc.blackoutDates.length > 0) {
-        const bookingDates = [];
-        let currentDate = new Date(fromDateTime);
-        const endDate = new Date(toDateTime);
-        
-        while (currentDate <= endDate) {
-          bookingDates.push(currentDate.toISOString().split('T')[0]);
-          currentDate.setDate(currentDate.getDate() + 1);
-        }
-
-        const blackoutDates = driverDoc.blackoutDates.map(date => 
-          new Date(date).toISOString().split('T')[0]
-        );
-
-        const hasBlackoutDate = bookingDates.some(date => blackoutDates.includes(date));
-        if (hasBlackoutDate) {
-          return res.status(400).json({ 
-            success: false,
-            error: "Driver is not available for the selected dates" 
-          });
-        }
-      }
-
-      // Check for driver's overlapping bookings
-      const driverOverlappingBookings = await Booking.find({
-        driver,
-        status: { $in: ['confirmed', 'pending'] },
-        $or: [
-          {
-            fromTime: { $lt: toTime },
-            toTime: { $gt: fromTime }
-          }
-        ]
-      });
-
-      if (driverOverlappingBookings.length > 0) {
-        return res.status(400).json({ 
-          success: false,
-          error: "Driver is already booked for the selected time period" 
-        });
-      }
-    }
-
-    // Check for overlapping bookings
-    const overlappingBookings = await Booking.find({
+    // Create booking
+    const booking = new Booking({
+      user,
       idVehicle,
-      status: { $in: ['confirmed', 'pending'] },
-      $or: [
-        {
-          fromTime: { $lt: toTime },
-          toTime: { $gt: fromTime }
-        }
-      ]
+      company: vehicleDoc.company,
+      driver: driver || null,
+      from,
+      to,
+      fromTime,
+      toTime,
+      intercity,
+      cityName,
+      status: 'pending',
+      bufferMinutes: vehicleDoc.bufferMinutes || 120,
+      paymentStatus,
+      cancellationPolicy: vehicleDoc.cancellationPolicy || 'moderate',
+      termsAccepted,
+      promoCode,
+      bookingChannel: bookingChannel || 'web',
+      priceDetails: { base, discount, tax, total },
+      auditLogs: [{ action: 'created', by: user, details: 'Booking created', at: new Date() }],
+      ...bookingData
     });
+    await booking.save();
+    // Mark vehicle as booked
+    vehicleDoc.status = 'booked';
+    await vehicleDoc.save();
+    res.status(201).json({ success: true, booking });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+};
 
-    if (overlappingBookings.length > 0) {
-      return res.status(400).json({ 
-        success: false,
-        error: "Vehicle is already booked for the selected time period" 
-      });
+// --- Cancel Booking with Refund, Reason, Audit ---
+const cancelBooking = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { user, reason } = req.body;
+    const booking = await Booking.findById(id);
+    if (!booking) return res.status(404).json({ success: false, error: 'Booking not found' });
+    if (booking.status === 'cancelled') return res.status(400).json({ success: false, error: 'Already cancelled' });
+    // Refund logic: flexible (full), moderate (50%), strict (none)
+    let refund = 0;
+    if (booking.cancellationPolicy === 'flexible') refund = booking.priceDetails?.total || 0;
+    else if (booking.cancellationPolicy === 'moderate') refund = (booking.priceDetails?.total || 0) * 0.5;
+    // strict: no refund
+    booking.status = 'cancelled';
+    booking.refundAmount = refund;
+    booking.cancellationReason = reason || '';
+    booking.auditLogs.push({ action: 'cancelled', by: user, details: reason, at: new Date() });
+    await booking.save();
+    // Mark vehicle as available
+    const vehicleDoc = await Vehicle.findById(booking.idVehicle);
+    if (vehicleDoc) {
+      vehicleDoc.status = 'available';
+      await vehicleDoc.save();
     }
 
-    // Start a session for transaction
-    const session = await mongoose.startSession();
-    session.startTransaction();
-
+    // --- NOTIFICATION LOGIC ---
     try {
-      // Create the booking
-      const booking = new Booking({
-        ...bookingData,
-        user,
-        idVehicle,
-        driver,
-        from,
-        to,
-        fromTime,
-        toTime,
-        intercity,
-        cityName: intercity ? cityName.toLowerCase() : undefined,
-        status: 'pending'
-      });
-
-      // Save the booking
-      await booking.save({ session });
-
-      // Commit the transaction
-      await session.commitTransaction();
-      session.endSession();
-
-      // Populate booking details for response
-      const populatedBooking = await Booking.findById(booking._id)
-        .populate("user", "name email")
-        .populate("idVehicle", "manufacturer model")
-        .populate("driver", "name license");
-
-      return res.status(201).json({ 
-        success: true,
-        message: "Booking created successfully", 
-        booking: populatedBooking 
-      });
-
-    } catch (error) {
-      // If any error occurs, abort the transaction
-      await session.abortTransaction();
-      session.endSession();
-      throw error;
+      const userDoc = await User.findById(booking.user);
+      const companyDoc = await RentalCompany.findById(vehicleDoc.companyId || vehicleDoc.company);
+      if (userDoc && userDoc.email) {
+        await sendBookingConfirmationEmail(
+          userDoc.email,
+          userDoc.name,
+          {
+            _id: booking._id,
+            vehicleName: vehicleDoc.model || vehicleDoc.manufacturer || '',
+            from: booking.from,
+            to: booking.to
+          },
+          false
+        );
+      }
+      if (companyDoc && companyDoc.email) {
+        await sendBookingConfirmationEmail(
+          companyDoc.email,
+          companyDoc.companyName,
+          {
+            _id: booking._id,
+            vehicleName: vehicleDoc.model || vehicleDoc.manufacturer || '',
+            from: booking.from,
+            to: booking.to
+          },
+          true
+        );
+      }
+      if (userDoc && userDoc.fcmToken) {
+        await sendUserPushNotification(
+          userDoc._id,
+          'Booking Cancelled',
+          `Your booking for ${vehicleDoc.model || vehicleDoc.manufacturer || 'vehicle'} from ${booking.from} to ${booking.to} has been cancelled.`
+        );
+      }
+      if (companyDoc && companyDoc.fcmToken) {
+        await sendCompanyPushNotification(
+          companyDoc._id,
+          'Booking Cancelled',
+          `A booking for ${vehicleDoc.model || vehicleDoc.manufacturer || 'vehicle'} from ${booking.from} to ${booking.to} has been cancelled.`
+        );
+      }
+    } catch (notifyErr) {
+      console.error('Error sending booking cancellation emails or push notifications:', notifyErr);
     }
 
-  } catch (error) {
-    console.error("Error creating booking:", error);
-    return res.status(500).json({ 
-      success: false,
-      error: error.message 
-    });
+    res.json({ success: true, booking });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+};
+
+// --- Complete Booking: Handover/Return, Feedback/Damage Link, Audit ---
+const completeBooking = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { user, feedbackId, damageReportIds } = req.body;
+    const booking = await Booking.findById(id);
+    if (!booking) return res.status(404).json({ success: false, error: 'Booking not found' });
+    booking.status = 'completed';
+    booking.handoverAt = booking.handoverAt || new Date();
+    booking.returnedAt = new Date();
+    if (feedbackId) booking.feedback.push(feedbackId);
+    if (damageReportIds && damageReportIds.length > 0) booking.damageReports.push(...damageReportIds);
+    booking.auditLogs.push({ action: 'completed', by: user, details: 'Booking completed', at: new Date() });
+    await booking.save();
+    // Mark vehicle as available
+    const vehicleDoc = await Vehicle.findById(booking.idVehicle);
+    if (vehicleDoc) {
+      vehicleDoc.status = 'available';
+      await vehicleDoc.save();
+    }
+    res.json({ success: true, booking });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+};
+
+// --- Soft Delete/Restore Booking (admin/company) ---
+const softDeleteBooking = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { isDeleted } = req.body;
+    const booking = await Booking.findByIdAndUpdate(id, { isDeleted }, { new: true });
+    if (!booking) return res.status(404).json({ success: false, error: 'Booking not found' });
+    booking.auditLogs.push({ action: isDeleted ? 'archived' : 'restored', at: new Date() });
+    await booking.save();
+    res.json({ success: true, booking });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+};
+
+// --- Add Admin/Company Note ---
+const addAdminNote = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { note, user } = req.body;
+    const booking = await Booking.findById(id);
+    if (!booking) return res.status(404).json({ success: false, error: 'Booking not found' });
+    booking.adminNotes = note;
+    booking.auditLogs.push({ action: 'note', by: user, details: note, at: new Date() });
+    await booking.save();
+    res.json({ success: true, booking });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
   }
 };
 
@@ -304,6 +318,59 @@ const confirmBooking = async (req, res) => {
         );
       }
 
+      // --- NOTIFICATION LOGIC ---
+      // Notify user and company by email
+      try {
+        // Get user and company info
+        const userDoc = await User.findById(booking.user);
+        const companyDoc = await RentalCompany.findById(vehicle.companyId || vehicle.company);
+        // Send to user
+        if (userDoc && userDoc.email) {
+          await sendBookingConfirmationEmail(
+            userDoc.email,
+            userDoc.name,
+            {
+              _id: booking._id,
+              vehicleName: vehicle.model || vehicle.manufacturer || '',
+              from: booking.from,
+              to: booking.to
+            },
+            false
+          );
+        }
+        // Send to company
+        if (companyDoc && companyDoc.email) {
+          await sendBookingConfirmationEmail(
+            companyDoc.email,
+            companyDoc.companyName,
+            {
+              _id: booking._id,
+              vehicleName: vehicle.model || vehicle.manufacturer || '',
+              from: booking.from,
+              to: booking.to
+            },
+            true
+          );
+        }
+        // --- PUSH NOTIFICATIONS ---
+        if (userDoc && userDoc.fcmToken) {
+          await sendUserPushNotification(
+            userDoc._id,
+            'Booking Confirmed',
+            `Your booking for ${vehicle.model || vehicle.manufacturer || 'vehicle'} from ${booking.from} to ${booking.to} has been confirmed.`
+          );
+        }
+        if (companyDoc && companyDoc.fcmToken) {
+          await sendCompanyPushNotification(
+            companyDoc._id,
+            'New Booking Confirmed',
+            `A booking for ${vehicle.model || vehicle.manufacturer || 'vehicle'} from ${booking.from} to ${booking.to} has been confirmed.`
+          );
+        }
+      } catch (notifyErr) {
+        console.error('Error sending booking confirmation emails or push notifications:', notifyErr);
+      }
+
       // Commit the transaction
       await session.commitTransaction();
       session.endSession();
@@ -329,224 +396,6 @@ const confirmBooking = async (req, res) => {
     });
   }
 };
-
-const cancelBooking = async (req, res) => {
-  try {
-    const { bookingId } = req.params;
-
-    // Find and validate the booking
-    const booking = await Booking.findById(bookingId);
-    if (!booking) {
-      return res.status(404).json({ 
-        success: false,
-        error: "Booking not found" 
-      });
-    }
-
-    // Validate booking is not already cancelled/completed
-    if (booking.status === 'cancelled') {
-      return res.status(400).json({ 
-        success: false,
-        error: "Booking is already cancelled" 
-      });
-    }
-
-    if (booking.status === 'completed') {
-      return res.status(400).json({ 
-        success: false,
-        error: "Cannot cancel a completed booking" 
-      });
-    }
-
-    // Find and validate the vehicle
-    const vehicle = await Vehicle.findById(booking.idVehicle);
-    if (!vehicle) {
-      return res.status(404).json({ 
-        success: false,
-        error: "Vehicle not found" 
-      });
-    }
-
-    // Start transaction to ensure atomic updates
-    const session = await mongoose.startSession();
-    session.startTransaction();
-
-    try {
-      // Generate all dates between booking.from and booking.to
-      const bookingDates = [];
-      const startDate = new Date(booking.from);
-      const endDate = new Date(booking.to);
-      
-      let currentDate = new Date(startDate);
-      while (currentDate <= endDate) {
-        bookingDates.push(new Date(currentDate));
-        currentDate.setDate(currentDate.getDate() + 1);
-      }
-
-      // Update booking status to cancelled
-      booking.status = 'cancelled';
-      await booking.save({ session });
-
-      // Remove booking dates from vehicle's blackout dates
-      if (vehicle.blackoutDates && vehicle.blackoutDates.length > 0) {
-        vehicle.blackoutDates = vehicle.blackoutDates.filter(date => {
-          const dateStr = new Date(date).toISOString().split('T')[0];
-          return !bookingDates.some(bookingDate => 
-            bookingDate.toISOString().split('T')[0] === dateStr
-          );
-        });
-        await vehicle.save({ session });
-      }
-
-      // If there's a driver assigned, remove booking dates from driver's blackout dates
-      if (booking.driver) {
-        const driver = await Driver.findById(booking.driver);
-        if (driver && driver.blackoutDates && driver.blackoutDates.length > 0) {
-          driver.blackoutDates = driver.blackoutDates.filter(date => {
-            const dateStr = new Date(date).toISOString().split('T')[0];
-            return !bookingDates.some(bookingDate => 
-              bookingDate.toISOString().split('T')[0] === dateStr
-            );
-          });
-          await driver.save({ session });
-        }
-      }
-
-      // Commit the transaction
-      await session.commitTransaction();
-      session.endSession();
-
-      return res.status(200).json({ 
-        success: true,
-        message: "Booking cancelled successfully",
-        booking
-      });
-
-    } catch (transactionError) {
-      // Rollback if any operation fails
-      await session.abortTransaction();
-      session.endSession();
-      throw transactionError;
-    }
-
-  } catch (error) {
-    console.error("Error cancelling booking:", error);
-    return res.status(500).json({ 
-      success: false,
-      error: error.message || "Failed to cancel booking" 
-    });
-  }
-};
-
-
-const completeBooking = async (req, res) => {
-  try {
-    const { bookingId } = req.params;
-
-    // Find and validate the booking
-    const booking = await Booking.findById(bookingId);
-    if (!booking) {
-      return res.status(404).json({ 
-        success: false,
-        error: "Booking not found" 
-      });
-    }
-
-    // Validate booking is not already cancelled/completed
-    if (booking.status === 'cancelled') {
-      return res.status(400).json({ 
-        success: false,
-        error: "Booking is already cancelled" 
-      });
-    }
-
-    if (booking.status === 'completed') {
-      return res.status(400).json({ 
-        success: false,
-        error: "Cannot complete a completed booking" 
-      });
-    }
-
-    // Find and validate the vehicle
-    const vehicle = await Vehicle.findById(booking.idVehicle);
-    if (!vehicle) {
-      return res.status(404).json({ 
-        success: false,
-        error: "Vehicle not found" 
-      });
-    }
-
-    // Start transaction to ensure atomic updates
-    const session = await mongoose.startSession();
-    session.startTransaction();
-
-    try {
-      // Generate all dates between booking.from and booking.to
-      const bookingDates = [];
-      const startDate = new Date(booking.from);
-      const endDate = new Date(booking.to);
-      
-      let currentDate = new Date(startDate);
-      while (currentDate <= endDate) {
-        bookingDates.push(new Date(currentDate));
-        currentDate.setDate(currentDate.getDate() + 1);
-      }
-
-      // Update booking status to cancelled
-      booking.status = 'completed';
-      await booking.save({ session });
-
-      // Remove booking dates from vehicle's blackout dates
-      if (vehicle.blackoutDates && vehicle.blackoutDates.length > 0) {
-        vehicle.blackoutDates = vehicle.blackoutDates.filter(date => {
-          const dateStr = new Date(date).toISOString().split('T')[0];
-          return !bookingDates.some(bookingDate => 
-            bookingDate.toISOString().split('T')[0] === dateStr
-          );
-        });
-        await vehicle.save({ session });
-      }
-
-      // If there's a driver assigned, remove booking dates from driver's blackout dates
-      if (booking.driver) {
-        const driver = await Driver.findById(booking.driver);
-        if (driver && driver.blackoutDates && driver.blackoutDates.length > 0) {
-          driver.blackoutDates = driver.blackoutDates.filter(date => {
-            const dateStr = new Date(date).toISOString().split('T')[0];
-            return !bookingDates.some(bookingDate => 
-              bookingDate.toISOString().split('T')[0] === dateStr
-            );
-          });
-          await driver.save({ session });
-        }
-      }
-
-      // Commit the transaction
-      await session.commitTransaction();
-      session.endSession();
-
-      return res.status(200).json({ 
-        success: true,
-        message: "Booking status changed to completed successfully",
-        booking
-      });
-
-    } catch (transactionError) {
-      // Rollback if any operation fails
-      await session.abortTransaction();
-      session.endSession();
-      throw transactionError;
-    }
-
-  } catch (error) {
-    console.error("Error changing booking status:", error);
-    return res.status(500).json({ 
-      success: false,
-      error: error.message || "Failed to change booking status" 
-    });
-  }
-};
-
 
 const getAllBookings = async (req, res) => {
   console.log("get all bookings");
@@ -659,7 +508,6 @@ const getBookingByUserId = async (req, res) => {
   }
 };
 
-
 const getBookingByCompanyId = async (req, res) => {
   try {
     const { company, status } = req.query;
@@ -732,9 +580,6 @@ const getBookingByCompanyId = async (req, res) => {
   }
 };
 
-
-
-
 const getBookingById = async (req, res) => {
   try {
     const bookingId = new mongoose.Types.ObjectId(req.params.id);
@@ -786,9 +631,6 @@ const getBookingById = async (req, res) => {
   }
 };
 
-
-
-// Update a booking
 const updateBooking = async (req, res) => {
   try {
     const booking = await Booking.findByIdAndUpdate(req.params.id, req.body, { new: true }).populate('idVehicle');
@@ -799,16 +641,125 @@ const updateBooking = async (req, res) => {
   }
 };
 
-// Delete a booking
 const deleteBooking = async (req, res) => {
   try {
-    const booking = await Booking.findByIdAndDelete(req.params.id);
+    const booking = await Booking.findById(req.params.id);
     if (!booking) return res.status(404).json({ message: 'Booking not found' });
+    // Only allow deletion if booking is not active
+    if (['pending', 'confirmed', 'ongoing'].includes(booking.status)) {
+      return res.status(400).json({
+        message: 'Cannot delete active booking',
+        bookingStatus: booking.status
+      });
+    }
+    await Booking.findByIdAndDelete(req.params.id);
     return  res.status(200).json({ message: 'Booking deleted successfully' });
   } catch (error) {
     return res.status(500).json({ error: error.message });
   }
 };
 
-module.exports = {createBooking,completeBooking,getBookingByCompanyId,cancelBooking ,confirmBooking, getAllBookings,getBookingByUserId , getBookingById , updateBooking , deleteBooking};
+// --- Mark Vehicle as Delivered ---
+const deliverVehicle = async (req, res) => {
+  try {
+    const { id } = req.params; // booking ID
+    const booking = await Booking.findById(id);
+    if (!booking) return res.status(404).json({ success: false, error: 'Booking not found' });
+    if (booking.status !== 'confirmed') return res.status(400).json({ success: false, error: 'Booking not confirmed' });
+    booking.status = 'ongoing';
+    booking.deliveredAt = new Date();
+    booking.auditLogs.push({ action: 'delivered', by: req.user?._id || 'system', details: 'Vehicle delivered to user', at: new Date() });
+    await booking.save();
+    // Optionally update vehicle status
+    const vehicle = await Vehicle.findById(booking.idVehicle);
+    if (vehicle) {
+      vehicle.status = 'ongoing';
+      await vehicle.save();
+    }
+    // Notify user and company
+    try {
+      const userDoc = await User.findById(booking.user);
+      const companyDoc = await RentalCompany.findById(vehicle.companyId || vehicle.company);
+      if (userDoc && userDoc.fcmToken) {
+        await sendUserPushNotification(
+          userDoc._id,
+          'Vehicle Delivered',
+          `Your vehicle for booking ${booking._id} has been delivered. Enjoy your ride!`
+        );
+      }
+      if (companyDoc && companyDoc.fcmToken) {
+        await sendCompanyPushNotification(
+          companyDoc._id,
+          'Vehicle Delivered',
+          `Vehicle for booking ${booking._id} has been delivered to the customer.`
+        );
+      }
+    } catch (notifyErr) {
+      console.error('Error sending delivery push notifications:', notifyErr);
+    }
+    res.json({ success: true, booking });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+};
 
+// --- Mark Vehicle as Returned ---
+const returnVehicle = async (req, res) => {
+  try {
+    const { id } = req.params; // booking ID
+    const booking = await Booking.findById(id);
+    if (!booking) return res.status(404).json({ success: false, error: 'Booking not found' });
+    if (booking.status !== 'ongoing') return res.status(400).json({ success: false, error: 'Vehicle not currently in use' });
+    booking.status = 'completed';
+    booking.returnedAt = new Date();
+    booking.auditLogs.push({ action: 'returned', by: req.user?._id || 'system', details: 'Vehicle returned by user', at: new Date() });
+    await booking.save();
+    // Mark vehicle as available
+    const vehicle = await Vehicle.findById(booking.idVehicle);
+    if (vehicle) {
+      vehicle.status = 'available';
+      await vehicle.save();
+    }
+    // Notify user and company
+    try {
+      const userDoc = await User.findById(booking.user);
+      const companyDoc = await RentalCompany.findById(vehicle.companyId || vehicle.company);
+      if (userDoc && userDoc.fcmToken) {
+        await sendUserPushNotification(
+          userDoc._id,
+          'Vehicle Returned',
+          `Your ride for booking ${booking._id} has been successfully returned. Thank you!`
+        );
+      }
+      if (companyDoc && companyDoc.fcmToken) {
+        await sendCompanyPushNotification(
+          companyDoc._id,
+          'Vehicle Returned',
+          `Vehicle for booking ${booking._id} has been returned by the customer.`
+        );
+      }
+    } catch (notifyErr) {
+      console.error('Error sending return push notifications:', notifyErr);
+    }
+    res.json({ success: true, booking });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+};
+
+module.exports = {
+  createBooking,
+  completeBooking,
+  getBookingByCompanyId,
+  cancelBooking,
+  confirmBooking,
+  deliverVehicle,
+  returnVehicle,
+  getAllBookings,
+  getBookingByUserId,
+  getBookingById,
+  updateBooking,
+  deleteBooking,
+  softDeleteBooking,
+  addAdminNote
+};

@@ -2,7 +2,7 @@
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY ); // Replace with your Stripe secret key  || ''
 const Payment = require("../models/payment.model");
 const Booking = require("../models/booking.model");
-
+const mongoose = require('mongoose');
 
 // In your backend (Node.js)
 exports.createPaymentIntent = async (req, res) => {
@@ -53,18 +53,19 @@ exports.createPaymentIntent = async (req, res) => {
 };
 exports.confirmPayment = async (req, res) => {
   const { paymentIntentId, bookingId, userId } = req.body;
-
+  const session = await mongoose.startSession();
+  session.startTransaction();
   try {
     // Verify payment with Stripe
     const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
-    
     if (paymentIntent.status !== "succeeded") {
+      await session.abortTransaction();
+      session.endSession();
       return res.status(400).json({
         success: false,
         message: "Payment not completed",
       });
     }
-
     // Save payment record
     const payment = new Payment({
       userId,
@@ -75,21 +76,32 @@ exports.confirmPayment = async (req, res) => {
       paymentStatus: paymentIntent.status,
       transactionId: paymentIntent.id,
     });
-
-    await payment.save();
-
-    // Update booking status
-    await Booking.findByIdAndUpdate(bookingId, { 
-      status: "confirmed",
-      paymentStatus: "paid" 
-    });
-
+    await payment.save({ session });
+    // Update booking status atomically
+    const bookingUpdate = await Booking.findByIdAndUpdate(
+      bookingId,
+      { status: "confirmed", paymentStatus: "paid" },
+      { session, new: true }
+    );
+    if (!bookingUpdate) {
+      await session.abortTransaction();
+      session.endSession();
+      // Optionally: refund payment here using Stripe API
+      return res.status(500).json({
+        success: false,
+        message: "Booking not found. Payment will be refunded.",
+      });
+    }
+    await session.commitTransaction();
+    session.endSession();
     res.status(200).json({
       success: true,
       message: "Payment confirmed successfully",
       payment
     });
   } catch (error) {
+    await session.abortTransaction();
+    session.endSession();
     console.error("Error confirming payment:", error);
     res.status(500).json({
       success: false,

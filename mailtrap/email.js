@@ -83,4 +83,36 @@ const sendResetSuccessEmail = async (email) => {
 	}
 };
 
-module.exports = {sendVerificationEmail , sendWelcomeEmail , sendPasswordResetEmail , sendResetSuccessEmail}
+// Generic function to send booking confirmation
+const sendBookingConfirmationEmail = async (email, name, bookingDetails, isCompany = false) => {
+    const recipient = [{ email }];
+    const subject = isCompany ? "New Booking Confirmed" : "Your Booking is Confirmed!";
+    const html = `
+        <h2>${isCompany ? 'A new booking has been confirmed for your vehicle!' : 'Thank you for booking with us!'}</h2>
+        <p>Hello ${name || ''},</p>
+        <p>${isCompany ? 'Booking details:' : 'Your booking is now confirmed. Here are your details:'}</p>
+        <ul>
+            <li><strong>Booking ID:</strong> ${bookingDetails._id}</li>
+            <li><strong>Vehicle:</strong> ${bookingDetails.vehicleName || ''}</li>
+            <li><strong>From:</strong> ${bookingDetails.from}</li>
+            <li><strong>To:</strong> ${bookingDetails.to}</li>
+        </ul>
+        <p>${isCompany ? 'Please prepare the vehicle for the customer.' : 'We look forward to serving you!'}</p>
+        <p>Best regards,<br/>Car Rental Team</p>
+    `;
+    try {
+        const response = await client.send({
+            from: sender,
+            to: recipient,
+            subject,
+            html,
+            category: "Booking Confirmation",
+        });
+        console.log("Booking confirmation email sent", response);
+    } catch (error) {
+        console.error(`Error sending booking confirmation email`, error);
+        throw new Error(`Error sending booking confirmation email: ${error}`);
+    }
+};
+
+module.exports = {sendVerificationEmail , sendWelcomeEmail , sendPasswordResetEmail , sendResetSuccessEmail, sendBookingConfirmationEmail}

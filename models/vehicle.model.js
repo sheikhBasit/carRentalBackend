@@ -64,10 +64,12 @@ const vehicleSchema = new mongoose.Schema({
     trim: true,
     uppercase: true 
   },
+  vin: { type: String },
   carImageUrls: [{ 
     type: String, 
     trim: true 
   }],
+  images: [{ type: String }], // Array of image URLs
   trips: { 
     type: Number, 
     default: 0,
@@ -84,29 +86,15 @@ const vehicleSchema = new mongoose.Schema({
     min: 1,
     max: 20 
   },
-  transmission: { 
-    type: String, 
-    enum: ['Auto', 'Manual'], 
-    required: true 
+  features: {
+    transmission: { type: String, enum: ['automatic', 'manual'], required: true },
+    fuelType: { type: String, enum: ['petrol', 'diesel', 'hybrid', 'electric'], required: true },
+    seats: { type: Number, min: 2, max: 15, required: true },
+    luggage: { type: Number, min: 0, max: 10 },
+    ac: { type: Boolean, default: true },
+    bluetooth: { type: Boolean, default: false },
+    gps: { type: Boolean, default: false }
   },
-  fuelType: {
-    type: String,
-    enum: ['Petrol', 'Diesel', 'Electric', 'Hybrid', 'CNG'],
-    required: true
-  },
-  vehicleType: {
-    type: String,
-    enum: ['Sedan', 'SUV', 'Hatchback', 'Coupe', 'Convertible', 'Van', 'Truck', 'Minivan', 'Pickup'],
-    required: true
-  },
-  features: [{
-    type: String,
-    enum: [
-      'AC', 'Heating', 'Bluetooth', 'Navigation', 'Sunroof', 
-      'Backup Camera', 'Keyless Entry', 'Leather Seats', 'Child Seat',
-      'Android Auto', 'Apple CarPlay', 'USB Ports', 'WiFi', 'Premium Sound'
-    ]
-  }],
   mileage: { 
     type: Number,
     min: 0 
@@ -120,9 +108,35 @@ const vehicleSchema = new mongoose.Schema({
       message: 'Last service date cannot be in the future'
     } 
   },
-  insuranceExpiry: { 
-    type: Date,
-    required: true 
+  insurance: {
+    policyNumber: { type: String },
+    provider: { type: String },
+    documentUrl: { type: String },
+    expiry: { 
+      type: Date,
+      required: true 
+    }
+  },
+  status: {
+    type: String,
+    enum: ['available', 'booked', 'under_maintenance', 'inactive'],
+    default: 'available',
+    required: true
+  },
+  maintenanceLogs: [{
+    date: { type: Date, required: true },
+    description: { type: String, required: true },
+    cost: { type: Number, min: 0 }
+  }],
+  dynamicPricing: {
+    baseRate: { type: Number, min: 0, default: 0 },
+    weekendRate: { type: Number, min: 0 },
+    seasonalRate: { type: Number, min: 0 },
+    surgeMultiplier: { type: Number, min: 1, default: 1 }
+  },
+  discount: {
+    percent: { type: Number, min: 0, max: 100, default: 0 },
+    validUntil: { type: Date }
   },
   availability: availabilitySchema,
   cities: [citySchema],
@@ -179,7 +193,8 @@ const vehicleSchema = new mongoose.Schema({
     default: 30,
     min: 1,
     max: 365
-  }
+  },
+  isDeleted: { type: Boolean, default: false },
 }, {
   timestamps: true,
   toJSON: { virtuals: true },
@@ -188,7 +203,7 @@ const vehicleSchema = new mongoose.Schema({
 
 // Virtual for checking if insurance is valid
 vehicleSchema.virtual('isInsuranceValid').get(function() {
-  return this.insuranceExpiry > new Date();
+  return this.insurance.expiry > new Date();
 });
 
 // Indexes

@@ -27,6 +27,11 @@ const userSchema = new mongoose.Schema({
   cnic: { type: String, required: true, unique: true },
   cnicFrontUrl: { type: String, required: false },
   cnicBackUrl: { type: String, required: false },
+  age: { type: Number, required: true, min: 21 }, // Age requirement for Pakistani drivers
+  otp: { type: String, required: false }, // For phone verification
+  otpVerified: { type: Boolean, default: false },
+  licenseVerified: { type: Boolean, default: false },
+  cnicVerified: { type: Boolean, default: false },
   paymentMethods: [paymentMethodSchema], // Added payment methods array
   lastLogin: {
     type: Date,
@@ -41,6 +46,15 @@ const userSchema = new mongoose.Schema({
   verificationToken: String,
   verificationPasswordToken: Date,
   verificationTokenExpiresAt: Date,
+  // --- RBAC and Compliance Fields ---
+  role: { type: String, enum: ['customer', 'company', 'admin'], default: 'customer', required: true },
+  isBlocked: { type: Boolean, default: false },
+  notificationPreferences: {
+    email: { type: Boolean, default: true },
+    sms: { type: Boolean, default: false },
+    push: { type: Boolean, default: false }
+  },
+  twoFactorEnabled: { type: Boolean, default: false },
 }, {
   timestamps: true
 });
