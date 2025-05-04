@@ -3,7 +3,7 @@ const router = express.Router();
 const damageReportController = require('../controllers/damagereport.controller');
 
 // Get all damage reports
-router.get('/', damageReportController.getAllDamageReports);
+router.get('/', damageReportController.getDamageReports);
 
 // Create a new damage report
 router.post('/', damageReportController.createDamageReport);

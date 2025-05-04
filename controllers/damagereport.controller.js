@@ -37,3 +37,18 @@ exports.getDamageReports = async (req, res) => {
     return res.status(500).json({ success: false, error: err.message });
   }
 };
+
+// Update a damage report (e.g., mark as resolved)
+exports.updateDamageReport = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const update = req.body;
+    const updatedReport = await DamageReport.findByIdAndUpdate(id, update, { new: true });
+    if (!updatedReport) {
+      return res.status(404).json({ success: false, error: 'Damage report not found.' });
+    }
+    return res.json({ success: true, damageReport: updatedReport });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+};

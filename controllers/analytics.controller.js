@@ -3,7 +3,7 @@ const Transaction = require('../models/transaction.model');
 const Booking = require('../models/booking.model');
 const Vehicle = require('../models/vehicle.model');
 const User = require('../models/user.model');
-const RentalCompany = require('../models/rentalCompany.model');
+const RentalCompany = require('../models/rentalcompany.model');
 
 exports.getRevenueAnalytics = async (req, res) => {
   try {
