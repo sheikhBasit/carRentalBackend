@@ -12,5 +12,6 @@ router.get('/getBooking', getAllBookings);
 router.get('/getBookingById/:id', getBookingById);
 router.patch('/updateBooking/:id', updateBooking);
 router.delete('/deleteBooking/:id', deleteBooking);
+router.patch('/completeBooking/:bookingId', completeBooking);
 
 module.exports = router;

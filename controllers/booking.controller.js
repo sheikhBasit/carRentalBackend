@@ -439,6 +439,115 @@ const cancelBooking = async (req, res) => {
 };
 
 
+const completeBooking = async (req, res) => {
+  try {
+    const { bookingId } = req.params;
+
+    // Find and validate the booking
+    const booking = await Booking.findById(bookingId);
+    if (!booking) {
+      return res.status(404).json({ 
+        success: false,
+        error: "Booking not found" 
+      });
+    }
+
+    // Validate booking is not already cancelled/completed
+    if (booking.status === 'cancelled') {
+      return res.status(400).json({ 
+        success: false,
+        error: "Booking is already cancelled" 
+      });
+    }
+
+    if (booking.status === 'completed') {
+      return res.status(400).json({ 
+        success: false,
+        error: "Cannot complete a completed booking" 
+      });
+    }
+
+    // Find and validate the vehicle
+    const vehicle = await Vehicle.findById(booking.idVehicle);
+    if (!vehicle) {
+      return res.status(404).json({ 
+        success: false,
+        error: "Vehicle not found" 
+      });
+    }
+
+    // Start transaction to ensure atomic updates
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+      // Generate all dates between booking.from and booking.to
+      const bookingDates = [];
+      const startDate = new Date(booking.from);
+      const endDate = new Date(booking.to);
+      
+      let currentDate = new Date(startDate);
+      while (currentDate <= endDate) {
+        bookingDates.push(new Date(currentDate));
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
+
+      // Update booking status to cancelled
+      booking.status = 'completed';
+      await booking.save({ session });
+
+      // Remove booking dates from vehicle's blackout dates
+      if (vehicle.blackoutDates && vehicle.blackoutDates.length > 0) {
+        vehicle.blackoutDates = vehicle.blackoutDates.filter(date => {
+          const dateStr = new Date(date).toISOString().split('T')[0];
+          return !bookingDates.some(bookingDate => 
+            bookingDate.toISOString().split('T')[0] === dateStr
+          );
+        });
+        await vehicle.save({ session });
+      }
+
+      // If there's a driver assigned, remove booking dates from driver's blackout dates
+      if (booking.driver) {
+        const driver = await Driver.findById(booking.driver);
+        if (driver && driver.blackoutDates && driver.blackoutDates.length > 0) {
+          driver.blackoutDates = driver.blackoutDates.filter(date => {
+            const dateStr = new Date(date).toISOString().split('T')[0];
+            return !bookingDates.some(bookingDate => 
+              bookingDate.toISOString().split('T')[0] === dateStr
+            );
+          });
+          await driver.save({ session });
+        }
+      }
+
+      // Commit the transaction
+      await session.commitTransaction();
+      session.endSession();
+
+      return res.status(200).json({ 
+        success: true,
+        message: "Booking status changed to completed successfully",
+        booking
+      });
+
+    } catch (transactionError) {
+      // Rollback if any operation fails
+      await session.abortTransaction();
+      session.endSession();
+      throw transactionError;
+    }
+
+  } catch (error) {
+    console.error("Error changing booking status:", error);
+    return res.status(500).json({ 
+      success: false,
+      error: error.message || "Failed to change booking status" 
+    });
+  }
+};
+
+
 const getAllBookings = async (req, res) => {
   console.log("get all bookings");
 
@@ -701,5 +810,5 @@ const deleteBooking = async (req, res) => {
   }
 };
 
-module.exports = {createBooking,getBookingByCompanyId,cancelBooking ,confirmBooking, getAllBookings,getBookingByUserId , getBookingById , updateBooking , deleteBooking};
+module.exports = {createBooking,completeBooking,getBookingByCompanyId,cancelBooking ,confirmBooking, getAllBookings,getBookingByUserId , getBookingById , updateBooking , deleteBooking};
 
