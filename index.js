@@ -118,17 +118,17 @@ const damageReportRoutes = require('./routes/damagereport.route');
 const analyticsRoutes = require('./routes/analytics.route');
 const notificationRoutes = require('./routes/notification.route');
 
-app.use('/users', userRoutes);
-app.use('/bookings', bookingRoutes);
-app.use('/drivers', driverRoutes);
-app.use('/rental-companies', rentalCompanyRoutes);
-app.use('/vehicles', vehicleRoutes);
-app.use('/auth', authRoute);
-app.use('/comment', commentRoutes);
-app.use('/likes', likeRoutes);
-app.use('/stripe', stripeRoute);
-app.use('/transaction', transactionBookingRoutes);
-app.use('/damagereport', damageReportRoutes);
+app.use('/api/users', userRoutes);
+app.use('/api/bookings', bookingRoutes);
+app.use('/api/drivers', driverRoutes);
+app.use('/api/rental-companies', rentalCompanyRoutes);
+app.use('/api/vehicles', vehicleRoutes);
+app.use('/api/auth', authRoute);
+app.use('/api/comment', commentRoutes);
+app.use('/api/likes', likeRoutes);
+app.use('/api/stripe', stripeRoute);
+app.use('/api/transaction', transactionBookingRoutes);
+app.use('/api/damagereport', damageReportRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/notifications', notificationRoutes);
 

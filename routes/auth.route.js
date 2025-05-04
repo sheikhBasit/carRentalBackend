@@ -7,9 +7,9 @@ const path = require('path')
 authRoute.get("/check-auth", verifyToken , checkAuth);
 authRoute.get("/create", create);
 authRoute.post("/signup", signup);
-// authRoute.post("/login", login);
 authRoute.post("/admin/login", login);
-// authRoute.get("/logout", logout);
+authRoute.post("/login", login);
+authRoute.post("/logout", logout);
 
 authRoute.post("/verify-email", verifyEmail);
 authRoute.post("/forgot-password", forgotPassword);

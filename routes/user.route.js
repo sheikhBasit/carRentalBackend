@@ -12,7 +12,6 @@ router.post(
     { name: "licenseFront", maxCount: 1 },
     { name: "licenseBack", maxCount: 1 },
     { name: "profilePic", maxCount: 1 },
-
   ]),
   userController.createUser
 );
@@ -23,7 +22,6 @@ router.get('/all', userController.getAllUsers);
 // Verify email
 router.post('/verify-email', userController.verifyEmail);
 
-
 // Get a single user by ID
 router.get('/:id', userController.getUserById);
 
@@ -32,9 +30,6 @@ router.put('/:id', userController.updateUser);
 
 // Delete a user
 router.delete('/:id', userController.deleteUser);
-
-// Verify email
-router.post('/verify-email', userController.verifyEmail);
 
 // User login
 router.post('/login', userController.login);
