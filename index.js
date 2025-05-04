@@ -117,6 +117,7 @@ const transactionBookingRoutes = require('./routes/transaction.route');
 const damageReportRoutes = require('./routes/damagereport.route');
 const analyticsRoutes = require('./routes/analytics.route');
 const notificationRoutes = require('./routes/notification.route');
+const feedbackRoutes = require('./routes/feedback.route');
 
 app.use('/api/users', userRoutes);
 app.use('/api/bookings', bookingRoutes);
@@ -131,6 +132,7 @@ app.use('/api/transaction', transactionBookingRoutes);
 app.use('/api/damagereport', damageReportRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/feedback', feedbackRoutes);
 
 // Health check endpoint
 app.get('/', (req, res) => {

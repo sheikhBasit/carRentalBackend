@@ -38,3 +38,35 @@ exports.getFeedback = async (req, res) => {
     return res.status(500).json({ success: false, error: err.message });
   }
 };
+
+// Get all feedback for a booking
+exports.getFeedbackForBooking = async (req, res) => {
+  try {
+    const { bookingId } = req.params;
+    const feedbacks = await Feedback.find({ booking: bookingId }).populate('user', 'name');
+    return res.json({ success: true, feedbacks });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+};
+
+// Get all feedback by a user
+exports.getFeedbackByUser = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const feedbacks = await Feedback.find({ user: userId }).populate('booking');
+    return res.json({ success: true, feedbacks });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+};
+
+// Admin: get all feedback
+exports.getAllFeedback = async (req, res) => {
+  try {
+    const feedbacks = await Feedback.find().populate('user', 'name').populate('booking');
+    return res.json({ success: true, feedbacks });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+};
