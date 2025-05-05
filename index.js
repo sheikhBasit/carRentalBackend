@@ -21,7 +21,10 @@ const allowedOrigins = [
   'exp://192.168.x.x:19000',
   /\.ngrok\.io$/,
   'https://car-rental-frontend.vercel.app',
-  'https://car-rental-backend-black.vercel.app'
+  'https://car-rental-backend-black.vercel.app',
+  'http://127.0.0.1:42229', 
+  'http://127.0.0.1:5174',  
+  '*'  
 ];
 
 // Configure multer storage
@@ -52,40 +55,25 @@ const upload = multer({
   }
 });
 
-app.use(cors({
-  origin: allowedOrigins,
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-Forwarded-For'],
-  exposedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-Forwarded-For'],
-  credentials: true,
-}));
-
-// Enhanced CORS middleware - must come FIRST 
-// app.use((req, res, next) => {
-//   const origin = req.headers.origin;
+// Enhanced CORS middleware - must come FIRST before any other middleware
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
   
-//   // Check if origin is allowed
-//   const isAllowed = allowedOrigins.some(allowed => {
-//     if (typeof allowed === 'string') return allowed === origin;
-//     if (allowed instanceof RegExp) return allowed.test(origin);
-//     return false;
-//   });
-
-//   if (isAllowed || !origin || process.env.NODE_ENV === 'development') {
-//     res.setHeader('Access-Control-Allow-Origin', origin || '*');
-//     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
-//     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
-//     res.setHeader('Access-Control-Allow-Credentials', 'true');
-//     res.setHeader('Vary', 'Origin'); // Important for caching
-//   }
-
-//   // Handle preflight requests
-//   if (req.method === 'OPTIONS') {
-//     return res.status(204).end();
-//   }
-
-//   next();
-// });
+  // Allow any origin for development
+  res.setHeader('Access-Control-Allow-Origin', origin || '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, X-Forwarded-For');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  res.setHeader('Access-Control-Expose-Headers', 'Content-Type, Authorization');
+  res.setHeader('Vary', 'Origin'); // Important for caching
+  
+  // Handle preflight requests
+  if (req.method === 'OPTIONS') {
+    return res.status(204).end();
+  }
+  
+  next();
+});
 
 // Regular middleware
 app.use(express.json({ limit: '10mb' }));
