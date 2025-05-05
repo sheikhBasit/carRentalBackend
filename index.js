@@ -52,6 +52,14 @@ const upload = multer({
   }
 });
 
+app.use(cors({
+  origin: allowedOrigins,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-Forwarded-For'],
+  exposedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-Forwarded-For'],
+  credentials: true,
+}));
+
 // Enhanced CORS middleware - must come FIRST
 app.use((req, res, next) => {
   const origin = req.headers.origin;
