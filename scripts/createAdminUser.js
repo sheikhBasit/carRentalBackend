@@ -5,23 +5,23 @@ const BASE_URL = 'https://car-rental-backend-black.vercel.app';
 
 async function createAdminUser() {
   try {
-    // 1. Sign up a new user
+    // 1. Sign up a new user with all required fields
     const signupRes = await axios.post(`${BASE_URL}/api/auth/signup`, {
       name: 'Admin User',
       email: 'admin@admin.com',
       password: 'admin123',
       confirmPassword: 'admin123',
+      role: 'admin',
+      isBlocked: false,
+      phoneNo: '03123456789',
+      address: 'Admin HQ',
+      city: 'Lahore',
+      province: 'Punjab',
+      cnic: '42101-1234567-1',
+      age: 23,
     });
     console.log('Signup response:', signupRes.data);
-
-    // 2. Manually update the user role to admin (requires backend endpoint or DB access)
-    // If you have a /users/updateRole endpoint, use it here; otherwise, update directly in DB.
-    // Example (pseudo):
-    // await axios.patch(`${BASE_URL}/api/users/updateRole`, { email: 'admin@admin.com', role: 'admin' });
-    // console.log('Role updated to admin.');
-
-    console.log('Now, set the user role to "admin" in your database for email admin@admin.com.');
-    console.log('Then you can log in with:');
+    console.log('You can now log in with:');
     console.log('Email: admin@admin.com');
     console.log('Password: admin123');
   } catch (err) {

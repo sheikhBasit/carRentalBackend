@@ -60,7 +60,7 @@ app.use(cors({
   credentials: true,
 }));
 
-// Enhanced CORS middleware - must come FIRST
+// Enhanced CORS middleware - must come FIRST 
 app.use((req, res, next) => {
   const origin = req.headers.origin;
   

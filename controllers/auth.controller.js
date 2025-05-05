@@ -12,10 +12,10 @@ const create = async(req,res) => {
 
 
 const signup = async(req, res)=>{
-    const {email,password,name} = req.body;
+    const {email,password,name, confirmPassword , role , isBlocked , phoneNo , address , city , province , cnic , age} = req.body;
 	console.log("req.body",req.body);
     try{
-        if(!email||!password||!name){
+        if(!email||!password||!name ){
             throw new Error("All fields are required");
         }
         const userAlreadyExists = await User.findOne({email});
@@ -31,7 +31,14 @@ const signup = async(req, res)=>{
             name,
             verificationToken,
             verificationTokenExpiresAt: Date.now() + 24 * 60 * 60 * 1000,
-
+            role,
+            isBlocked,
+            phoneNo,
+            address,
+            city,
+            province,
+            cnic,
+            age,
         })
 
         await user.save();
