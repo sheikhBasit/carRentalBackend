@@ -3,7 +3,7 @@ const User = require ('../models/user.model.js')
 const {sendVerificationEmail , sendWelcomeEmail , sendPasswordResetEmail , sendResetSuccessEmail} = require("../mailtrap/email.js");
 const generateTokenAndSetCookie = require("../utils/generateTokenAndSetCookie.js");
 const crypto = require('crypto')
-
+const jwt = require('jsonwebtoken')
 
 
 const create = async(req,res) => {
@@ -110,37 +110,40 @@ const verifyEmail = async (req, res) => {
 };
 
 const login = async (req, res) => {
-	const { email, password } = req.body;
-	try {
-		const user = await User.findOne({ email });
-		if (!user) {
-			return res.status(400).json({ success: false, message: "Invalid credentials" });
-		}
-		const isPasswordValid = await bcrypt.compare(password, user.password);
-		if (!isPasswordValid) {
-			return res.status(400).json({ success: false, message: "Invalid credentials" });
-		}
-		if(!user.isVerified){
-			return res.status(400).json({ success: false, message: "Email is not verified" });
-		
-		}
-		generateTokenAndSetCookie(res, user._id);
-
-		user.lastLogin = new Date();
-		await user.save();
-
-		res.status(200).json({
-			success: true,
-			message: "Logged in successfully",
-			user: {
-				...user._doc,
-				password: undefined,
-			},
-		});
-	} catch (error) {
-		console.log("Error in login ", error);
-		res.status(400).json({ success: false, message: error.message });
-	}
+    try {
+        const { email, password } = req.body;
+        if (!email || !password) {
+            return res.status(400).json({ success: false, message: 'Email and password are required.' });
+        }
+        const user = await User.findOne({ email });
+        if (!user) {
+            return res.status(401).json({ success: false, message: 'Invalid credentials' });
+        }
+        const isMatch = await bcrypt.compare(password, user.password);
+        if (!isMatch) {
+            return res.status(401).json({ success: false, message: 'Invalid credentials' });
+        }
+        if(!user.isVerified){
+            return res.status(400).json({ success: false, message: "Email is not verified" });
+        
+        }
+        // Generate JWT
+        const token = jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET, { expiresIn: '1d' });
+        // Set cookie for cross-site usage
+        res.cookie('token', token, {
+            httpOnly: true,
+            secure: true, // Only send cookie on HTTPS
+            sameSite: 'none', // Allow cross-site
+            maxAge: 24 * 60 * 60 * 1000
+        });
+        // Also send token in response body for SPA usage
+        user.lastLogin = new Date();
+        await user.save();
+        res.status(200).json({ success: true, token, user: { ...user._doc, password: undefined } });
+    } catch (err) {
+        console.log("Error in login ", err);
+        res.status(500).json({ success: false, message: err.message });
+    }
 };
 
 
