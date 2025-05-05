@@ -20,8 +20,8 @@ const allowedOrigins = [
   'http://10.0.2.2',
   'exp://192.168.x.x:19000',
   /\.ngrok\.io$/,
-  'https://your-production-web.com',
-  'https://your-mobile-app.com'
+  'https://car-rental-frontend.vercel.app',
+  'https://car-rental-backend-black.vercel.app'
 ];
 
 // Configure multer storage
@@ -65,7 +65,7 @@ app.use((req, res, next) => {
 
   if (isAllowed || !origin || process.env.NODE_ENV === 'development') {
     res.setHeader('Access-Control-Allow-Origin', origin || '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
     res.setHeader('Access-Control-Allow-Credentials', 'true');
     res.setHeader('Vary', 'Origin'); // Important for caching
