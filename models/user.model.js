@@ -27,7 +27,7 @@ const userSchema = new mongoose.Schema({
   cnic: { type: String, required: true, unique: true },
   cnicFrontUrl: { type: String, required: false },
   cnicBackUrl: { type: String, required: false },
-  age: { type: Number, required: true, min: 21 }, // Age requirement for Pakistani drivers
+  age: { type: Number, required: true, min: 18 }, // Age requirement for Pakistani drivers
   otp: { type: String, required: false }, // For phone verification
   otpVerified: { type: Boolean, default: false },
   licenseVerified: { type: Boolean, default: false },
