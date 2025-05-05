@@ -74,28 +74,14 @@ const driverSchema = new Schema({
     type: String, 
     required: true, 
     unique: true,
-    validate: {
-      validator: function(v) {
-        return /^[0-9]{5}-[0-9]{7}-[0-9]$/.test(v);
-      },
-      message: props => `${props.value} is not a valid CNIC format (XXXXX-XXXXXXX-X)!`
-    }
+    
   },
   
   // Contact Information
   phNo: { 
     type: String, 
     required: true,
-    validate: {
-      validator: function(v) {
-        // Remove all non-digit characters except + for validation
-        const cleanNumber = v.replace(/[^\d+]/g, '');
-        // Check if it's a valid Pakistani mobile number (03XX or +92XX followed by 7 digits)
-        // Accepts any network code starting with 3
-        return /^((\+92|0)3[0-9]{2}[0-9]{7})$/.test(cleanNumber);
-      },
-      message: props => `${props.value} is not a valid Pakistani phone number! Please use format: +923XX-XXXXXXX or 03XX-XXXXXXX`
-    }
+    
   },
   
   // Professional Details
