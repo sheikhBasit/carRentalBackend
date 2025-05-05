@@ -282,7 +282,8 @@ exports.getTransactionDetails = async (req, res) => {
                       rent: 1,
                       features: 1,
                       fuelType: 1,
-                      year: 1
+                      year: 1,
+                      companyId: 1
                     }
                   }
                 ]
@@ -328,6 +329,26 @@ exports.getTransactionDetails = async (req, res) => {
               }
             },
             {
+              $lookup: {
+                from: "rentalcompanies",
+                localField: "vehicle.companyId",
+                foreignField: "_id",
+                as: "company",
+                pipeline: [
+                  {
+                    $project: {
+                      companyName: 1,
+                      email: 1,
+                      phoneNo: 1,
+                      address: 1,
+                      logo: 1,
+                      rating: 1
+                    }
+                  }
+                ]
+              }
+            },
+            {
               $unwind: {
                 path: "$vehicle",
                 preserveNullAndEmptyArrays: true
@@ -342,6 +363,12 @@ exports.getTransactionDetails = async (req, res) => {
             {
               $unwind: {
                 path: "$driver",
+                preserveNullAndEmptyArrays: true
+              }
+            },
+            {
+              $unwind: {
+                path: "$company",
                 preserveNullAndEmptyArrays: true
               }
             }
