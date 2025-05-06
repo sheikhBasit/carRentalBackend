@@ -135,21 +135,7 @@ exports.createDriver = async (req, res) => {
     // Parse all data fields
     const availability = parseAvailability(req.body);
     
-    // Parse pricing tiers
-    const pricingTiers = [];
-    const pricingTierKeys = Object.keys(req.body).filter(key => key.startsWith('pricingTiers['));
-    if (pricingTierKeys.length > 0) {
-      const indices = [...new Set(pricingTierKeys.map(key => {
-        const match = key.match(/pricingTiers\[(\d+)\]/);
-        return match ? parseInt(match[1]) : null;
-      }).filter(index => index !== null))];
-      
-      pricingTiers.push(...indices.map(index => ({
-        vehicleType: req.body[`pricingTiers[${index}][vehicleType]`],
-        hourlyRate: parseFloat(req.body[`pricingTiers[${index}][hourlyRate]`]),
-        dailyRate: parseFloat(req.body[`pricingTiers[${index}][dailyRate]`])
-      })));
-    }
+    
 
     // Parse blackout dates
     const blackoutDates = Object.keys(req.body)
@@ -168,7 +154,6 @@ exports.createDriver = async (req, res) => {
       profileimg: profileImageUrl,
       baseHourlyRate: parseFloat(baseHourlyRate),
       baseDailyRate: parseFloat(baseDailyRate),
-      pricingTiers,
       availability,
       blackoutDates,
       currentPromotion: req.body['currentPromotion[discountPercentage]'] ? {
@@ -243,9 +228,6 @@ exports.getAllDrivers = async (req, res) => {
       matchStage.baseHourlyRate = {};
       if (minHourlyRate) matchStage.baseHourlyRate.$gte = Number(minHourlyRate);
       if (maxHourlyRate) matchStage.baseHourlyRate.$lte = Number(maxHourlyRate);
-    }
-    if (vehicleType) {
-      matchStage['pricingTiers.vehicleType'] = vehicleType;
     }
 
     const aggregationPipeline = [
@@ -535,7 +517,7 @@ exports.getCompanyDrivers = async (req, res) => {
 exports.updateDriver = async (req, res) => {
   try {
     const { id } = req.params;
-    const {
+    let {
       name,
       license,
       cnic,
@@ -544,12 +526,23 @@ exports.updateDriver = async (req, res) => {
       experience,
       baseHourlyRate,
       baseDailyRate,
-      pricingTiers,
       currentPromotion,
-      availability,
-      blackoutDates,
+      blackoutDates
     } = req.body;
 
+    console.log(req.body);
+
+    // Parse availability from string if provided
+    let parsedAvailability;
+    if (req.body.availability) {
+      try {
+        parsedAvailability = JSON.parse(req.body.availability);
+      } catch (err) {
+        return res.status(400).json({ error: 'Invalid availability format' });
+      }
+    }
+
+  
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({
         success: false,
@@ -557,7 +550,6 @@ exports.updateDriver = async (req, res) => {
       });
     }
 
-    // Check if driver exists
     const existingDriver = await Driver.findById(id);
     if (!existingDriver) {
       return res.status(404).json({
@@ -566,11 +558,9 @@ exports.updateDriver = async (req, res) => {
       });
     }
 
-    // Format phone number before validation
+    // Format phone number
     const formattedPhNo = phNo ? phNo.replace(/\s/g, '') : existingDriver.phNo;
     const cleanNumber = formattedPhNo.replace(/[^\d+]/g, '');
-    
-    // Check if it's a valid Pakistani mobile number
     if (!cleanNumber.match(/^((\+92|0)3[0-9]{9})$/)) {
       return res.status(400).json({
         success: false,
@@ -578,17 +568,13 @@ exports.updateDriver = async (req, res) => {
       });
     }
 
-    // Check for duplicate license or CNIC if being updated
+    // Check for duplicates
     if (license || cnic) {
       const duplicateDriver = await Driver.findOne({
-        $and: [
-          { _id: { $ne: id } },
-          {
-            $or: [
-              ...(license ? [{ license: license.toUpperCase() }] : []),
-              ...(cnic ? [{ cnic }] : [])
-            ]
-          }
+        _id: { $ne: id },
+        $or: [
+          ...(license ? [{ license: license.toUpperCase() }] : []),
+          ...(cnic ? [{ cnic }] : [])
         ]
       });
 
@@ -600,18 +586,17 @@ exports.updateDriver = async (req, res) => {
       }
     }
 
-    // Handle profile image update if provided
+    // Handle image upload
     let profileImageUrl = existingDriver.profileimg;
-    if (req.files?.profileimg && req.files.profileimg.length > 0) {
-      const profileImage = req.files.profileimg[0];
+    if (req.files?.profileimg?.length > 0) {
       try {
-        const result = await uploadOnCloudinary(profileImage.buffer);
+        const result = await uploadOnCloudinary(req.files.profileimg[0].buffer);
         if (!result?.url) {
           throw new Error('Failed to upload profile image');
         }
         profileImageUrl = result.url;
-      } catch (uploadError) {
-        console.error("Error uploading driver image:", uploadError);
+      } catch (err) {
+        console.error("Image upload error:", err);
         return res.status(500).json({
           success: false,
           message: "Profile image upload failed"
@@ -619,7 +604,7 @@ exports.updateDriver = async (req, res) => {
       }
     }
 
-    // Prepare update object
+    // Build update object
     const updateData = {
       ...(name && { name }),
       ...(license && { license: license.toUpperCase() }),
@@ -629,9 +614,8 @@ exports.updateDriver = async (req, res) => {
       ...(experience && { experience }),
       ...(baseHourlyRate && { baseHourlyRate }),
       ...(baseDailyRate && { baseDailyRate }),
-      ...(pricingTiers && { pricingTiers }),
       ...(currentPromotion && { currentPromotion }),
-      ...(availability && { availability }),
+      ...(parsedAvailability && { availability: parsedAvailability }),
       ...(blackoutDates && { blackoutDates }),
       profileimg: profileImageUrl
     };
@@ -647,6 +631,7 @@ exports.updateDriver = async (req, res) => {
       message: "Driver updated successfully",
       data: updatedDriver
     });
+
   } catch (error) {
     console.error("Error updating driver:", error);
     return res.status(500).json({
@@ -657,6 +642,7 @@ exports.updateDriver = async (req, res) => {
     });
   }
 };
+
 
 // Delete a driver
 exports.deleteDriver = async (req, res) => {

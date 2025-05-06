@@ -8,7 +8,7 @@ router.get('/company', driverController.getCompanyDrivers);
 
 router.get('/getDriver', driverController.getAllDrivers);
 router.get('/:id', driverController.getDriverById);
-router.put('/:id', driverController.updateDriver);
+router.put('/:id', upload.fields([{ name: "profileimg", maxCount: 1 }]), driverController.updateDriver);
 router.delete('/:id', driverController.deleteDriver);
 
 router.get('/availableByDate', driverController.getAvailableDriversByDate);

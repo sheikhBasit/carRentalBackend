@@ -9,6 +9,7 @@ cloudinary.config({
 }); 
 
 const uploadOnCloudinary = (buffer) => {
+  console.log(buffer)
   return new Promise((resolve, reject) => {
     const uploadStream = cloudinary.uploader.upload_stream(
       { 
@@ -26,7 +27,9 @@ const uploadOnCloudinary = (buffer) => {
           // Ensure URL has proper image extension
           // If result.url doesn't end with image extension, append .jpg
           const url = result.url;
+          console.log(url)
           const secureUrl = result.secure_url;
+          console.log(secureUrl)
           
           // Check if URL already has an image extension
           const hasImageExt = /\.(jpg|jpeg|png|webp|gif)$/i.test(url);
@@ -34,6 +37,8 @@ const uploadOnCloudinary = (buffer) => {
           // If not, create URL with extension
           const finalUrl = hasImageExt ? url : `${url}.jpg`;
           const finalSecureUrl = hasImageExt ? secureUrl : `${secureUrl}.jpg`;
+          console.log(finalUrl)
+          console.log(finalSecureUrl)
           
           resolve({
             ...result,

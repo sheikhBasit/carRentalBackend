@@ -111,24 +111,24 @@ exports.createVehicle = async (req, res) => {
       features,
       mileage,
       lastServiceDate,
-      insuranceExpiry,
       availability,
       cities,
       currentLocation,
       blackoutDates,
       minimumRentalHours,
-      maximumRentalDays
+      maximumRentalDays,
+      insuranceExpiry
     } = req.body;
-
+    console.log(req.body)
     // Validate required fields
     if (!companyId || !numberPlate || !manufacturer || !model || !year || !rent || 
-        !transmission || !fuelType || !vehicleType || !insuranceExpiry) {
+        !transmission || !fuelType || !vehicleType ) {
       return res.status(400).json({ 
         success: false,
         message: "Missing required fields" 
       });
     }
-
+    
     // Validate availability
     if (!availability || !availability.days || !availability.startTime || !availability.endTime) {
       return res.status(400).json({ 
@@ -159,7 +159,10 @@ exports.createVehicle = async (req, res) => {
     if (req.files && req.files.length > 0) {
       for (const file of req.files) {
         try {
+          console.log("here")
+          console.log(file)
           const result = await uploadOnCloudinary(file.buffer);
+          console.log(result)
           if (result?.url) {
             carImageUrls.push(result.url);
           }
@@ -192,13 +195,15 @@ exports.createVehicle = async (req, res) => {
       features: features || [],
       mileage: mileage || 0,
       lastServiceDate: lastServiceDate ? new Date(lastServiceDate) : undefined,
-      insuranceExpiry: new Date(insuranceExpiry),
       availability,
       cities,
       currentLocation: currentLocation || { type: 'Point', coordinates: [0, 0] },
       blackoutDates: blackoutDates || [],
       minimumRentalHours: minimumRentalHours || 4,
       maximumRentalDays: maximumRentalDays || 30,
+      insurance: {
+        expiry: insuranceExpiry ? new Date(insuranceExpiry) : undefined
+      },
     });
 
     await vehicle.save();
@@ -323,8 +328,7 @@ exports.getAllVehicles = async (req, res) => {
       {
         $addFields: {
           trips: { $size: "$bookings" },
-          isInsuranceValid: { $gt: ["$insuranceExpiry", new Date()] }
-        }
+          isInsuranceValid: { $gt: ["$insurance.expiry", new Date()] }      }
       },
       {
         $project: {
@@ -412,8 +416,7 @@ exports.getVehicleById = async (req, res) => {
       },
       {
         $addFields: {
-          isInsuranceValid: { $gt: ["$insuranceExpiry", new Date()] },
-          availableDates: {
+          isInsuranceValid: { $gt: ["$insurance.expiry", new Date()] },    availableDates: {
             $filter: {
               input: "$availability.days",
               as: "day",
@@ -748,7 +751,6 @@ exports.updateVehicle = async (req, res) => {
       features,
       mileage,
       lastServiceDate,
-      insuranceExpiry,
       availability,
       cities,
       currentLocation,
@@ -850,7 +852,6 @@ exports.updateVehicle = async (req, res) => {
       ...(features && { features }),
       ...(mileage && { mileage }),
       ...(lastServiceDate && { lastServiceDate: new Date(lastServiceDate) }),
-      ...(insuranceExpiry && { insuranceExpiry: new Date(insuranceExpiry) }),
       ...(availability && { availability }),
       ...(cities && { cities }),
       ...(currentLocation && { currentLocation }),
