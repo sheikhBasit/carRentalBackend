@@ -57,12 +57,7 @@ exports.createDriver = async (req, res) => {
   try {
     // Enhanced logging
     console.log("Received form data:", JSON.stringify(req.body, null, 2));
-    console.log("Received files:", req.files?.map(f => ({
-      fieldname: f.fieldname,
-      originalname: f.originalname,
-      size: f.size
-    })));
-
+    
     // Destructure required fields
     const {
       name,
