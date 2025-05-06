@@ -1,4 +1,4 @@
-const RentalCompany = require('../models/rentalcompany.model.js');
+const User = require('../models/user.model.js');
 const Vehicle = require('../models/vehicle.model.js'); // Ensure correct path
 const { uploadOnCloudinary } = require('../utils/connectCloudinary.js');
 const fs =  require('fs');
@@ -30,10 +30,10 @@ exports.deleteAllVehicles = async (req, res) => {
 // Create Vehicle (updated to include availability and cities)
 // exports.createVehicle = async (req, res) => {
 //   try {
-//     const { numberPlate, companyId, availability, cities, ...vehicleData } = req.body;
+//     const { numberPlate, hostId, availability, cities, ...vehicleData } = req.body;
 
-//     if (!companyId) {
-//       return res.status(400).json({ message: "Company ID is required" });
+//     if (!hostId) {
+//       return res.status(400).json({ message: "host ID is required" });
 //     }
 //     console.log(availability)
 //     // Validate availability
@@ -78,7 +78,7 @@ exports.deleteAllVehicles = async (req, res) => {
 //     const vehicle = new Vehicle({
 //       ...vehicleData,
 //       numberPlate,
-//       company: companyId,
+//       host: hostId,
 //       carImageUrls,
 //       availability,
 //       cities,
@@ -100,7 +100,7 @@ exports.createVehicle = async (req, res) => {
   try {
     const {
       numberPlate,
-      companyId,
+      hostId,
       manufacturer,
       model,
       year,
@@ -121,7 +121,7 @@ exports.createVehicle = async (req, res) => {
     } = req.body;
 
     // Validate required fields
-    if (!companyId || !numberPlate || !manufacturer || !model || !year || !rent || 
+    if (!hostId || !numberPlate || !manufacturer || !model || !year || !rent || 
         !transmission || !fuelType || !vehicleType || !insuranceExpiry) {
       return res.status(400).json({ 
         success: false,
@@ -129,6 +129,13 @@ exports.createVehicle = async (req, res) => {
       });
     }
 
+    const hostUser = await User.findById(hostId);
+    if (!hostUser || hostUser.role !== 'host') {
+      return res.status(400).json({ 
+        success: false,
+        message: "Invalid host ID or user is not a host" 
+      });
+    }
     // Validate availability
     if (!availability || !availability.days || !availability.startTime || !availability.endTime) {
       return res.status(400).json({ 
@@ -179,7 +186,7 @@ exports.createVehicle = async (req, res) => {
 
     // Create new vehicle
     const vehicle = new Vehicle({
-      company: companyId,
+      host: hostId,
       numberPlate: numberPlate.toUpperCase(),
       manufacturer: manufacturer.toLowerCase(),
       model: model.toLowerCase(),
@@ -258,7 +265,7 @@ exports.getAllVehicles = async (req, res) => {
 
     // Add filters based on query parameters
     if (normalizedCity) {
-      matchStage["company.city"] = normalizedCity;
+      matchStage["host.city"] = normalizedCity;
     }
     if (date) {
       matchStage["availability.days"] = { 
@@ -290,24 +297,31 @@ exports.getAllVehicles = async (req, res) => {
     const aggregationPipeline = [
       {
         $lookup: {
-          from: "rentalcompanies",
-          localField: "company",
+          from: "users",
+          localField: "host",
           foreignField: "_id",
-          as: "company",
+          as: "host",
           pipeline: [
             {
+              $match: {
+                role: "host"
+              }
+            },
+            {
               $project: {
-                companyName: 1,
+                name: 1,
                 email: 1,
+                phone: 1,
                 address: 1,
-                phNum: 1,
-                city: 1
+                city: 1,
+                profilePicture: 1
               }
             }
           ]
         }
       },
-      { $unwind: "$company" },
+      { $unwind: "$host" },
+      
       { $match: matchStage },
       {
         $lookup: {
@@ -381,24 +395,30 @@ exports.getVehicleById = async (req, res) => {
       },
       {
         $lookup: {
-          from: "rentalcompanies",
-          localField: "company",
+          from: "users",
+          localField: "host",
           foreignField: "_id",
-          as: "company",
+          as: "host",
           pipeline: [
             {
+              $match: {
+                role: "host"
+              }
+            },
+            {
               $project: {
-                companyName: 1,
+                name: 1,
                 email: 1,
+                phone: 1,
                 address: 1,
-                phNum: 1,
-                city: 1
+                city: 1,
+                profilePicture: 1
               }
             }
           ]
         }
       },
-      { $unwind: "$company" },
+      { $unwind: "$host" },
       {
         $lookup: {
           from: "bookings",
@@ -491,28 +511,33 @@ exports.getAllCityVehicles = async (req, res) => {
     const vehicles = await Vehicle.aggregate([
       {
         $lookup: {
-          from: "rentalcompanies",
-          localField: "company",
+          from: "users",
+          localField: "host",
           foreignField: "_id",
-          as: "company",
+          as: "host",
           pipeline: [
             {
+              $match: {
+                role: "host"
+              }
+            },
+            {
               $project: {
-                companyName: 1,
-                gmail: 1,
+                name: 1,
+                email: 1,
+                phone: 1,
                 address: 1,
-                phNum: 1,
-                bankDetails: 1,
-                city: 1
+                city: 1,
+                profilePicture: 1
               }
             }
           ]
         }
       },
-      { $unwind: "$company" },
+      { $unwind: "$host" },
       {
         $match: {
-          "company.city": normalizedCity,
+          "host.city": normalizedCity,
         }
       }
     ]);
@@ -563,25 +588,34 @@ exports.getVehiclesByManufacturer = async (req, res) => {
       const aggregationPipeline = [
         {
           $lookup: {
-            from: "rentalcompanies",
-            localField: "company",
+            from: "users",
+            localField: "host",
             foreignField: "_id",
-            as: "company",
+            as: "host",
             pipeline: [
               {
+                $match: {
+                  role: "host"
+                }
+              },
+              {
                 $project: {
-                  companyName: 1,
-                  city: 1
+                  name: 1,
+                  email: 1,
+                  phone: 1,
+                  address: 1,
+                  city: 1,
+                  profilePicture: 1
                 }
               }
             ]
           }
         },
-        { $unwind: "$company" },
+        { $unwind: "$host" },
         {
           $match: {
             manufacturer: manufacturer,
-            "company.city": normalizedCity
+            "host.city": normalizedCity
           }
         },
         {
@@ -698,26 +732,46 @@ exports.getVehicles = async (req,res)=>{
   }
 }
 
-exports.getCompanyVehicles = async (req, res) => {
+exports.getHostVehicles = async (req, res) => {
   try {
-      const { company } = req.query;
+    const { hostId } = req.query;
 
-      if (!company) {
-          return res.status(400).json({ error: "Company name is required" });
-      }
-
-      const vehicles = await Vehicle.find({ company });
-      if (!vehicles) {
-        return res.status(404).json({ error: "Vehicle not found" });
+    if (!hostId) {
+      return res.status(400).json({ 
+        success: false,
+        message: "Host ID is required" 
+      });
     }
 
-      res.status(200).json({ success: true, vehicles });
+    // Validate host exists and has host role
+    const hostUser = await User.findById(hostId);
+    if (!hostUser || hostUser.role !== 'host') {
+      return res.status(400).json({ 
+        success: false,
+        message: "Invalid host ID or user is not a host" 
+      });
+    }
 
+    const vehicles = await Vehicle.find({ host: hostId });
+    if (!vehicles || vehicles.length === 0) {
+      return res.status(404).json({ 
+        success: false,
+        message: "No vehicles found for this host" 
+      });
+    }
+
+    res.status(200).json({ 
+      success: true,
+      count: vehicles.length,
+      data: vehicles 
+    });
   } catch (error) {
-      res.status(500).json({ error: error.message });
+    res.status(500).json({ 
+      success: false,
+      error: error.message 
+    });
   }
 };
-
 
 
 exports.getManufacturers = async (req, res) => {
@@ -898,7 +952,7 @@ exports.updateVehicle = async (req, res) => {
 // Update vehicle status
 exports.setVehicleStatus = async (req, res) => {
   try {
-    // RBAC: Only admin or owning company can update status
+    // RBAC: Only admin or owning host can update status
     const { id } = req.params;
     const { status } = req.body;
     if (!['available', 'booked', 'under_maintenance', 'inactive'].includes(status)) {
@@ -929,7 +983,7 @@ exports.logMaintenance = async (req, res) => {
   }
 };
 
-// Update Dynamic Pricing & Discount (admin/company only)
+// Update Dynamic Pricing & Discount (admin/host only)
 exports.updatePricing = async (req, res) => {
   try {
     const { id } = req.params;
@@ -943,7 +997,7 @@ exports.updatePricing = async (req, res) => {
   }
 };
 
-// Soft Delete/Restore Vehicle (admin/company only)
+// Soft Delete/Restore Vehicle (admin/host only)
 exports.softDeleteVehicle = async (req, res) => {
   try {
     const { id } = req.params;
@@ -957,7 +1011,7 @@ exports.softDeleteVehicle = async (req, res) => {
   }
 };
 
-// Upload Vehicle Images (admin/company only)
+// Upload Vehicle Images (admin/host only)
 exports.uploadVehicleImages = async (req, res) => {
   try {
     const { id } = req.params;

@@ -20,7 +20,7 @@ router.get('/getVehicle', vehicleController.getAllVehicles);
 router.get('/getCityVehicle', vehicleController.getAllCityVehicles);
 router.get('/fetchVehicles',vehicleController.fetchAllVehicles);
 router.get("/getManufacturers", vehicleController.getManufacturers);
-router.get("/company", vehicleController.getCompanyVehicles);
+router.get("/company", vehicleController.getHostVehicles);
 router.get('/:id', vehicleController.getVehicleById);
 router.put('/:id', vehicleController.updateVehicle);
 router.delete('/:id', vehicleController.deleteVehicle);

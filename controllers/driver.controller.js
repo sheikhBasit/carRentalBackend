@@ -3,49 +3,12 @@ const { uploadOnCloudinary } = require('../utils/connectCloudinary.js');
 const mongoose = require('mongoose');
 const Booking = require('../models/booking.model.js');
 
-// exports.createDriver = async (req, res) => {
-//   try {
-//     console.log(req.body);
-//     console.log(req.files); // Debugging - See what file is received
-
-//     let profileImageLocalPath;
-//     if (req.files && req.files.profileimg && req.files.profileimg.length > 0) {
-//       profileImageLocalPath = req.files.profileimg[0].path;
-//     }
-
-//     if (!profileImageLocalPath) {
-//       return res.status(400).json({ message: "Profile image is required" });
-//     }
-
-//     // Upload to Cloudinary
-//     const profileImageUrl = await uploadOnCloudinary(profileImageLocalPath);
-//     if (!profileImageUrl) {
-//       return res.status(500).json({ message: "Image upload failed" });
-//     }
-
-//     // Save to DB
-//     const driver = new Driver({
-//       ...req.body,
-//       profileimg: profileImageUrl.url, // Store Cloudinary URL in DB
-//     });
-
-//     await driver.save();
-
-//     return res.status(201).json({
-//       message: "Driver created successfully",
-//       driver,
-//     });
-//   } catch (error) {
-//     return res.status(500).json({ error: error.message });
-//   }
-// };
-
-// Get all drivers
+// Create a new driver
 exports.createDriver = async (req, res) => {
   try {
     const {
       name,
-      company,
+      host,
       license,
       cnic,
       phNo,
@@ -72,11 +35,19 @@ exports.createDriver = async (req, res) => {
     }
 
     // Validate required fields
-    if (!name || !company || !license || !cnic || !formattedPhNo || !age || 
+    if (!name || !host || !license || !cnic || !formattedPhNo || !age || 
         !experience || !baseHourlyRate || !baseDailyRate || !availability) {
       return res.status(400).json({ 
         success: false,
         message: "Missing required fields" 
+      });
+    }
+
+    // Validate host ID
+    if (!mongoose.Types.ObjectId.isValid(host)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid host ID"
       });
     }
 
@@ -124,10 +95,10 @@ exports.createDriver = async (req, res) => {
     // Create new driver
     const driver = new Driver({
       name,
-      company,
+      host,
       license: license.toUpperCase(),
       cnic,
-      phNo: formattedPhNo, // Keep the original format with hyphens if present
+      phNo: formattedPhNo,
       age,
       experience,
       profileimg: profileImageUrl,
@@ -162,10 +133,11 @@ exports.createDriver = async (req, res) => {
   }
 };
 
+// Get all drivers
 exports.getAllDrivers = async (req, res) => {
   try {
     const {
-      company,
+      host,
       minRating,
       maxRating,
       minExperience,
@@ -180,8 +152,8 @@ exports.getAllDrivers = async (req, res) => {
     const matchStage = {};
 
     // Add filters based on query parameters
-    if (company) {
-      matchStage.company = new mongoose.Types.ObjectId(company);
+    if (host) {
+      matchStage.host = new mongoose.Types.ObjectId(host);
     }
     if (minRating || maxRating) {
       matchStage.rating = {};
@@ -210,24 +182,27 @@ exports.getAllDrivers = async (req, res) => {
     const aggregationPipeline = [
       {
         $lookup: {
-          from: "rentalcompanies",
-          localField: "company",
+          from: "users",
+          localField: "host",
           foreignField: "_id",
-          as: "company",
+          as: "host",
           pipeline: [
             {
+              $match: { role: "host" }
+            },
+            {
               $project: {
-                companyName: 1,
+                name: 1,
                 email: 1,
                 address: 1,
-                phNum: 1,
+                phoneNo: 1,
                 city: 1
               }
             }
           ]
         }
       },
-      { $unwind: "$company" },
+      { $unwind: "$host" },
       { $match: matchStage },
       {
         $lookup: {
@@ -308,24 +283,27 @@ exports.getDriverById = async (req, res) => {
       },
       {
         $lookup: {
-          from: "rentalcompanies",
-          localField: "company",
+          from: "users",
+          localField: "host",
           foreignField: "_id",
-          as: "company",
+          as: "host",
           pipeline: [
             {
+              $match: { role: "host" }
+            },
+            {
               $project: {
-                companyName: 1,
+                name: 1,
                 email: 1,
                 address: 1,
-                phNum: 1,
+                phoneNo: 1,
                 city: 1
               }
             }
           ]
         }
       },
-      { $unwind: "$company" },
+      { $unwind: "$host" },
       {
         $lookup: {
           from: "bookings",
@@ -387,48 +365,52 @@ exports.getDriverById = async (req, res) => {
   }
 };
 
-exports.getCompanyDrivers = async (req, res) => {
+// Get drivers by host ID
+exports.getHostDrivers = async (req, res) => {
   try {
-    const { company } = req.query;
+    const { host } = req.query;
 
-    if (!company) {
+    if (!host) {
       return res.status(400).json({
         success: false,
-        message: "Company ID is required"
+        message: "Host ID is required"
       });
     }
 
-    if (!mongoose.Types.ObjectId.isValid(company)) {
+    if (!mongoose.Types.ObjectId.isValid(host)) {
       return res.status(400).json({
         success: false,
-        message: "Invalid company ID"
+        message: "Invalid host ID"
       });
     }
 
     const aggregationPipeline = [
       {
-        $match: { company: new mongoose.Types.ObjectId(company) }
+        $match: { host: new mongoose.Types.ObjectId(host) }
       },
       {
         $lookup: {
-          from: "rentalcompanies",
-          localField: "company",
+          from: "users",
+          localField: "host",
           foreignField: "_id",
-          as: "company",
+          as: "host",
           pipeline: [
             {
+              $match: { role: "host" }
+            },
+            {
               $project: {
-                companyName: 1,
+                name: 1,
                 email: 1,
                 address: 1,
-                phNum: 1,
+                phoneNo: 1,
                 city: 1
               }
             }
           ]
         }
       },
-      { $unwind: "$company" },
+      { $unwind: "$host" },
       {
         $lookup: {
           from: "bookings",
@@ -470,7 +452,7 @@ exports.getCompanyDrivers = async (req, res) => {
     if (!drivers || drivers.length === 0) {
       return res.status(404).json({
         success: false,
-        message: "No drivers found for this company"
+        message: "No drivers found for this host"
       });
     }
 
@@ -480,11 +462,11 @@ exports.getCompanyDrivers = async (req, res) => {
       data: drivers
     });
   } catch (error) {
-    console.error("Error fetching company drivers:", error);
+    console.error("Error fetching host drivers:", error);
     return res.status(500).json({
       success: false,
       error: process.env.NODE_ENV === 'production'
-        ? 'An error occurred while fetching company drivers'
+        ? 'An error occurred while fetching host drivers'
         : error.message
     });
   }

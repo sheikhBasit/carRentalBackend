@@ -62,4 +62,15 @@ const verifyToken = (req, res, next) => {
   }
 };
 
-module.exports = { verifyToken };
+const authorizeRoles = (...roles) => {
+  return (req, res, next) => {
+    if (!req.user || !roles.includes(req.user.role)) {
+      return res.status(403).json({ 
+        success: false, 
+        message: `Forbidden: Requires one of these roles [${roles.join(', ')}]` 
+      });
+    }
+    next();
+  };
+};
+module.exports = { verifyToken, authorizeRoles };

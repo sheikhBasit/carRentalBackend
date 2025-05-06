@@ -34,10 +34,17 @@ const citySchema = new Schema({
 });
 
 const vehicleSchema = new mongoose.Schema({
-  company: { 
+  host: { 
     type: Schema.Types.ObjectId,
-    ref: "RentalCompany",
-    required: true 
+    ref: "User",
+    required: true,
+    validate: {
+      validator: async function(hostId) {
+        const user = await mongoose.model('User').findById(hostId);
+        return user && user.role === 'host';
+      },
+      message: 'Host must be a user with role "host"'
+    } 
   },
   manufacturer: { 
     type: String, 

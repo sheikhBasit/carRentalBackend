@@ -55,10 +55,10 @@ const driverSchema = new Schema({
     }
   },
   
-  // Company Reference
-  company: {
+  // host Reference
+  host: {
     type: Schema.Types.ObjectId, 
-    ref: "RentalCompany",
+    ref: "User",
     required: true 
   },
   
@@ -206,7 +206,7 @@ driverSchema.methods.getEffectiveHourlyRate = function(vehicleType) {
 };
 
 // Indexes
-driverSchema.index({ company: 1 });
+driverSchema.index({ host: 1 });
 driverSchema.index({ rating: -1 });
 driverSchema.index({ 'currentAssignment.booking': 1 });
 driverSchema.index({ baseHourlyRate: 1 });

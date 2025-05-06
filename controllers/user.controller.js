@@ -654,3 +654,265 @@ exports.verifyUserDocument = async (req, res) => {
     res.status(500).json({ message: 'Server error', error: err.message });
   }
 };
+
+
+
+
+// [Previous methods remain unchanged...]
+
+// ================== HOST-SPECIFIC METHODS ================== //
+
+/**
+ * @desc    Get all hosts (users with role 'host')
+ * @route   GET /api/users/hosts
+ * @access  Private/Admin
+ */
+exports.getAllHosts = async (req, res) => {
+  try {
+    const { verifiedOnly } = req.query;
+    
+    const query = { role: 'host' };
+    if (verifiedOnly === 'true') {
+      query.isVerified = true;
+    }
+
+    const hosts = await User.find(query)
+      .select('-password -verificationToken -verificationTokenExpiresAt -resetPasswordToken -resetPasswordExpiresAt')
+      .lean();
+
+    if (!hosts || hosts.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "No hosts found"
+      });
+    }
+
+    // Get vehicle counts for each host
+    const hostsWithVehicleCounts = await Promise.all(hosts.map(async host => {
+      const vehicleCount = await Vehicle.countDocuments({ host: host._id });
+      return {
+        ...host,
+        vehicleCount
+      };
+    }));
+
+    return res.status(200).json({
+      success: true,
+      count: hostsWithVehicleCounts.length,
+      data: hostsWithVehicleCounts
+    });
+
+  } catch (error) {
+    console.error("Error fetching hosts:", error);
+    return res.status(500).json({
+      success: false,
+      error: process.env.NODE_ENV === 'production'
+        ? 'An error occurred while fetching hosts'
+        : error.message
+    });
+  }
+};
+
+/**
+ * @desc    Get a single host by ID with their vehicles
+ * @route   GET /api/users/hosts/:hostId
+ * @access  Private/Admin
+ */
+exports.getHostById = async (req, res) => {
+  try {
+    const { hostId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(hostId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid host ID format"
+      });
+    }
+
+    const host = await User.findOne({ 
+      _id: hostId,
+      role: 'host'
+    })
+    .select('-password -verificationToken -verificationTokenExpiresAt -resetPasswordToken -resetPasswordExpiresAt')
+    .lean();
+
+    if (!host) {
+      return res.status(404).json({
+        success: false,
+        message: "Host not found"
+      });
+    }
+
+    const vehicles = await Vehicle.find({ host: hostId })
+      .select('manufacturer model year rent carImageUrls status')
+      .lean();
+
+    const hostData = {
+      ...host,
+      vehicles,
+      vehicleCount: vehicles.length
+    };
+
+    return res.status(200).json({
+      success: true,
+      data: hostData
+    });
+
+  } catch (error) {
+    console.error("Error fetching host:", error);
+    return res.status(500).json({
+      success: false,
+      error: process.env.NODE_ENV === 'production'
+        ? 'An error occurred while fetching the host'
+        : error.message
+    });
+  }
+};
+
+/**
+ * @desc    Get host profile (for the host themselves)
+ * @route   GET /api/users/hosts/profile/me
+ * @access  Private/Host
+ */
+exports.getHostProfile = async (req, res) => {
+  try {
+    if (!req.user || req.user.role !== 'host') {
+      return res.status(403).json({
+        success: false,
+        message: "Unauthorized: Only hosts can access this endpoint"
+      });
+    }
+
+    const host = await User.findById(req.user._id)
+      .select('-password -verificationToken -verificationTokenExpiresAt -resetPasswordToken -resetPasswordExpiresAt')
+      .lean();
+
+    if (!host) {
+      return res.status(404).json({
+        success: false,
+        message: "Host not found"
+      });
+    }
+
+    const vehicles = await Vehicle.find({ host: req.user._id })
+      .select('manufacturer model year rent carImageUrls status')
+      .lean();
+
+    const stats = await Vehicle.aggregate([
+      { $match: { host: mongoose.Types.ObjectId(req.user._id) } },
+      {
+        $group: {
+          _id: null,
+          totalVehicles: { $sum: 1 },
+          availableVehicles: {
+            $sum: {
+              $cond: [{ $eq: ["$status", "available"] }, 1, 0]
+            }
+          },
+          bookedVehicles: {
+            $sum: {
+              $cond: [{ $eq: ["$status", "booked"] }, 1, 0]
+            }
+          },
+          averageRating: { $avg: "$rating" }
+        }
+      }
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        ...host,
+        vehicles,
+        stats: stats[0] || {
+          totalVehicles: 0,
+          availableVehicles: 0,
+          bookedVehicles: 0,
+          averageRating: 0
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error("Error fetching host profile:", error);
+    return res.status(500).json({
+      success: false,
+      error: process.env.NODE_ENV === 'production'
+        ? 'An error occurred while fetching host profile'
+        : error.message
+    });
+  }
+};
+
+/**
+ * @desc    Update host profile
+ * @route   PUT /api/users/hosts/profile/me
+ * @access  Private/Host
+ */
+exports.updateHostProfile = async (req, res) => {
+  try {
+    if (!req.user || req.user.role !== 'host') {
+      return res.status(403).json({
+        success: false,
+        message: "Unauthorized: Only hosts can access this endpoint"
+      });
+    }
+
+    const { password, ...updateData } = req.body;
+
+    if (password) {
+      updateData.password = await bcrypt.hash(password, 10);
+    }
+
+    // Handle file uploads if any
+    if (req.files) {
+      const uploadFile = async (file) => {
+        if (!file || file.length === 0) return null;
+        try {
+          const result = await uploadOnCloudinary(file[0].buffer);
+          return result?.url || null;
+        } catch (error) {
+          console.error(`Error uploading ${file[0].fieldname}:`, error);
+          return null;
+        }
+      };
+
+      if (req.files.profilePic) {
+        updateData.profilePic = await uploadFile(req.files.profilePic);
+      }
+      if (req.files.cnicFront) {
+        updateData.cnicFrontUrl = await uploadFile(req.files.cnicFront);
+      }
+      if (req.files.cnicBack) {
+        updateData.cnicBackUrl = await uploadFile(req.files.cnicBack);
+      }
+      if (req.files.licenseFront) {
+        updateData.licenseFrontUrl = await uploadFile(req.files.licenseFront);
+      }
+      if (req.files.licenseBack) {
+        updateData.licenseBackUrl = await uploadFile(req.files.licenseBack);
+      }
+    }
+
+    const updatedHost = await User.findByIdAndUpdate(
+      req.user._id,
+      updateData,
+      { new: true, runValidators: true }
+    ).select('-password -verificationToken -verificationTokenExpiresAt -resetPasswordToken -resetPasswordExpiresAt');
+
+    return res.status(200).json({
+      success: true,
+      message: "Host profile updated successfully",
+      data: updatedHost
+    });
+
+  } catch (error) {
+    console.error("Error updating host profile:", error);
+    return res.status(500).json({
+      success: false,
+      error: process.env.NODE_ENV === 'production'
+        ? 'An error occurred while updating host profile'
+        : error.message
+    });
+  }
+};
