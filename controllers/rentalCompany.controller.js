@@ -1,7 +1,7 @@
 const RentalCompany = require('../models/rentalcompany.model.js');
 const bcrypt = require('bcrypt');
 const { uploadOnCloudinary } = require('../utils/connectCloudinary.js'); // Ensure this file exists
-
+const jwt = require('jsonwebtoken')
 // Create a new rental company
 // exports.createRentalCompany = async (req, res) => {
 //   try {
@@ -192,7 +192,16 @@ exports.getRentalCompanyByEmail = async (req, res) => {
     if (!isMatch) {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
-
+   // Generate JWT
+        const token = jwt.sign({ id: company._id, role: "company" }, process.env.JWT_SECRET, { expiresIn: '1d' });
+        // Set cookie for cross-site usage
+        res.cookie('token', token, {
+            httpOnly: true,
+            secure: true, // Only send cookie on HTTPS
+            sameSite: 'none', // Allow cross-site
+            maxAge: 24 * 60 * 60 * 1000
+        });
+     
     // Successful authentication response
     return res.status(200).json({
       success: true,
