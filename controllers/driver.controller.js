@@ -698,49 +698,118 @@ exports.deleteDriver = async (req, res) => {
   }
 };
 
-// Get available drivers for a given date (and optionally time)
 exports.getAvailableDriversByDate = async (req, res) => {
   try {
-    const { date, time, needDriver, company } = req.query;
-    if (!date) {
-      return res.status(400).json({ success: false, message: 'Date is required' });
-    }
-    if (needDriver !== 'true') {
-      return res.status(200).json({ success: true, message: 'Driver not needed', data: [] });
-    }
-    const inputDate = new Date(date);
-    if (isNaN(inputDate.getTime())) {
-      return res.status(400).json({ success: false, message: 'Invalid date format' });
-    }
-    const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    const dayName = daysOfWeek[inputDate.getDay()];
 
-    // Build query
-    const matchStage = {
-      'availability.days': dayName,
-      $or: [
-        { blackoutDates: { $exists: false } },
-        { blackoutDates: { $size: 0 } },
-        { blackoutDates: { $not: { $elemMatch: { $eq: inputDate.toISOString().split('T')[0] } } } }
-      ],
-    };
-
-    // Add company filter if provided
-    if (company) {
-      matchStage.company = company;
-    }
-
-    // If time is provided, filter by time window
-    let drivers = await Driver.find(matchStage);
-    if (time) {
-      drivers = drivers.filter(driver => {
-        if (!driver.availability?.startTime || !driver.availability?.endTime) return true;
-        return time >= driver.availability.startTime && time <= driver.availability.endTime;
+    const { startDate, endDate, company } = req.query;
+console.log(req.query)
+    // Validate required parameters
+    if (!startDate || !endDate) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Both startDate and endDate are required' 
       });
     }
-    return res.status(200).json({ success: true, count: drivers.length, data: drivers });
+
+    // Parse dates
+    const startDateTime = new Date(startDate);
+    const endDateTime = new Date(endDate);
+
+    if (isNaN(startDateTime.getTime()) || isNaN(endDateTime.getTime())) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Invalid date format. Please use ISO format (e.g., 2025-05-06T10:00:00Z)' 
+      });
+    }
+
+    if (startDateTime >= endDateTime) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'endDate must be after startDate' 
+      });
+    }
+
+    // Validate company ID if provided
+    if (company) {
+      if (!mongoose.Types.ObjectId.isValid(company)) {
+        return res.status(400).json({ 
+          success: false, 
+          message: 'Invalid company ID format' 
+        });
+      }
+
+      // Check if company exists
+      const companyExists = await RentalCompany.exists({ _id: company });
+      if (!companyExists) {
+        return res.status(404).json({ 
+          success: false, 
+          message: 'Company not found' 
+        });
+      }
+    }
+
+    // Build query
+    const query = company ? { company } : {};
+
+    // Find available drivers
+    const drivers = await Driver.find(query)
+      .populate('bookings')
+      .populate('currentAssignment.booking');
+
+    const availableDrivers = drivers.filter(driver => {
+      // Check availability for each day in the range
+      let currentDate = new Date(startDateTime);
+      while (currentDate <= endDateTime) {
+        const dayName = currentDate.toLocaleString('en-US', { weekday: 'long' });
+        
+        if (!driver.availability.days.includes(dayName)) {
+          return false;
+        }
+
+        // Check time window
+        const [startHour, startMin] = driver.availability.startTime.split(':').map(Number);
+        const [endHour, endMin] = driver.availability.endTime.split(':').map(Number);
+        
+        const dayStart = new Date(currentDate);
+        dayStart.setHours(startHour, startMin, 0, 0);
+        
+        const dayEnd = new Date(currentDate);
+        dayEnd.setHours(endHour, endMin, 0, 0);
+
+        if (currentDate.getDate() === startDateTime.getDate()) {
+          if (startDateTime < dayStart || startDateTime > dayEnd) return false;
+        }
+        
+        if (currentDate.getDate() === endDateTime.getDate()) {
+          if (endDateTime < dayStart || endDateTime > dayEnd) return false;
+        }
+
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
+
+      // Check for booking conflicts
+      const hasBookingConflict = driver.bookings.some(booking => {
+        return (booking.startTime < endDateTime && booking.endTime > startDateTime);
+      });
+
+      // Check current assignment
+      const hasAssignmentConflict = driver.currentAssignment && 
+        driver.currentAssignment.endTime > startDateTime;
+
+      return !hasBookingConflict && !hasAssignmentConflict;
+    });
+
+    return res.status(200).json({ 
+      success: true, 
+      count: availableDrivers.length, 
+      data: availableDrivers 
+    });
+
   } catch (error) {
-    console.error('Error fetching available drivers by date:', error);
-    return res.status(500).json({ success: false, error: error.message });
+    console.error('Error fetching available drivers:', error);
+    return res.status(500).json({ 
+      success: false, 
+      error: 'Server error while fetching available drivers' 
+    });
   }
 };

@@ -38,7 +38,6 @@ const pricingTierSchema = new Schema({
 });
 
 const driverSchema = new Schema({
-  // Basic Information
   name: { 
     type: String, 
     required: true,
@@ -54,15 +53,11 @@ const driverSchema = new Schema({
       message: props => `${props.value} is not a valid image URL!`
     }
   },
-  
-  // Company Reference
   company: {
     type: Schema.Types.ObjectId, 
     ref: "RentalCompany",
     required: true 
   },
-  
-  // Identification
   license: { 
     type: String, 
     required: true, 
@@ -74,17 +69,14 @@ const driverSchema = new Schema({
     type: String, 
     required: true, 
     unique: true,
-    
+    match: /^[0-9]{13}$/ // Assuming Pakistan CNIC format as 13 digits
   },
-  
-  // Contact Information
   phNo: { 
     type: String, 
     required: true,
-    
+    unique: true,
+    match: /^[0-9]{10,15}$/ // Adjust regex as needed for your country
   },
-  
-  // Professional Details
   age: { 
     type: Number, 
     required: true,
@@ -97,8 +89,6 @@ const driverSchema = new Schema({
     min: 0,
     max: 50 
   },
-  
-  // Pricing Information
   baseHourlyRate: {
     type: Number,
     min: 0,
@@ -109,7 +99,7 @@ const driverSchema = new Schema({
     min: 0,
     required: true
   },
-  pricingTiers: [pricingTierSchema], // Special rates for different vehicle types
+  pricingTiers: [pricingTierSchema],
   currentPromotion: {
     discountPercentage: {
       type: Number,
@@ -118,46 +108,32 @@ const driverSchema = new Schema({
     },
     validUntil: Date
   },
-  
-  // Availability System
   availability: availabilitySchema,
-  
   blackoutDates: [{ 
     type: Date,
     validate: {
       validator: function(date) {
-        return date >= new Date();
+        return date.getTime() >= Date.now();
       },
       message: 'Blackout dates must be in the future'
     }
   }],
-  
-  
-  // Booking Management
   bookings: [{
     type: Schema.Types.ObjectId,
     ref: 'Booking'
   }],
-  
-  // Performance Metrics
   rating: {
     type: Number,
     min: 0,
     max: 5,
     default: 0,
-    set: function(val) {
-      return Math.round(val * 10) / 10;
-    }
+    set: val => Math.round(val * 10) / 10
   },
   completedTrips: {
     type: Number,
     default: 0,
     min: 0
   },
-  
-  
-  
-  // Current Assignment
   currentAssignment: {
     vehicle: {
       type: Schema.Types.ObjectId,
@@ -168,7 +144,7 @@ const driverSchema = new Schema({
       ref: 'Booking'
     },
     endTime: Date,
-    currentRate: Number // Current active rate for this assignment
+    currentRate: Number
   }
 }, {
   timestamps: true,
@@ -176,33 +152,75 @@ const driverSchema = new Schema({
   toObject: { virtuals: true }
 });
 
-// Virtual Properties
+// Virtuals
 driverSchema.virtual('isCurrentlyAssigned').get(function() {
-  return this.currentAssignment && this.currentAssignment.endTime > new Date();
+  return this.currentAssignment && this.currentAssignment.endTime && this.currentAssignment.endTime.getTime() > Date.now();
 });
 
 driverSchema.virtual('isOnPromotion').get(function() {
   return this.currentPromotion && 
-         this.currentPromotion.validUntil > new Date() &&
+         this.currentPromotion.validUntil &&
+         this.currentPromotion.validUntil.getTime() > Date.now() &&
          this.currentPromotion.discountPercentage > 0;
 });
 
-// Calculate effective hourly rate considering promotions
+// Methods
 driverSchema.methods.getEffectiveHourlyRate = function(vehicleType) {
   let rate = this.baseHourlyRate;
-  
-  // Check for vehicle-specific pricing tier
   const tier = this.pricingTiers.find(t => t.vehicleType === vehicleType);
   if (tier) {
     rate = tier.hourlyRate;
   }
-  
-  // Apply promotion if available
   if (this.isOnPromotion) {
     rate = rate * (1 - (this.currentPromotion.discountPercentage / 100));
   }
-  
-  return Math.round(rate * 100) / 100; // Round to 2 decimal places
+  return Math.round(rate * 100) / 100;
+};
+
+driverSchema.methods.isAvailableForDateTimeRange = function(startDateTime, endDateTime) {
+  const start = new Date(startDateTime);
+  const end = new Date(endDateTime);
+
+  if (this.blackoutDates?.some(date => new Date(date).toDateString() === start.toDateString())) {
+    return false;
+  }
+
+  const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const dayName = daysOfWeek[start.getDay()];
+  if (!this.availability.days.includes(dayName)) {
+    return false;
+  }
+
+  const [startHour, startMinute] = this.availability.startTime.split(':').map(Number);
+  const [endHour, endMinute] = this.availability.endTime.split(':').map(Number);
+
+  const availabilityStart = new Date(start);
+  availabilityStart.setHours(startHour, startMinute, 0, 0);
+
+  const availabilityEnd = new Date(start);
+  availabilityEnd.setHours(endHour, endMinute, 0, 0);
+
+  return start >= availabilityStart && end <= availabilityEnd;
+};
+
+driverSchema.methods.hasBookingConflict = async function(startDateTime, endDateTime) {
+  const start = new Date(startDateTime);
+  const end = new Date(endDateTime);
+
+  if (this.currentAssignment?.endTime && this.currentAssignment.endTime.getTime() > start.getTime()) {
+    return true;
+  }
+
+  const conflictingBookings = await mongoose.model('Booking').find({
+    driver: this._id,
+    $or: [
+      { startTime: { $lt: end }, endTime: { $gt: start } },
+      { startTime: { $gte: start, $lte: end } },
+      { endTime: { $gte: start, $lte: end } }
+    ]
+  }); // .lean() can be added here if desired
+
+  return conflictingBookings.length > 0;
 };
 
 // Indexes
@@ -210,7 +228,7 @@ driverSchema.index({ company: 1 });
 driverSchema.index({ rating: -1 });
 driverSchema.index({ 'currentAssignment.booking': 1 });
 driverSchema.index({ baseHourlyRate: 1 });
-driverSchema.index({ certifications: 1 });
+// Removed nonexistent index on 'certifications'
 
 const Driver = mongoose.model('Driver', driverSchema);
 
