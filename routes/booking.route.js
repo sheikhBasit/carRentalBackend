@@ -5,9 +5,9 @@ const { verifyToken } = require('../midllewares/verifyToken');
 const { bookingValidationRules, validate } = require('../utils/validate');
 
 // Define booking routes
-router.post('/postBooking', verifyToken, bookingValidationRules(), validate, createBooking);
-router.post('/confirm/:id', verifyToken, confirmBooking );
-router.patch('/cancelBooking/:id', verifyToken, cancelBooking);
+router.post('/postBooking', bookingValidationRules(), validate, createBooking);
+router.post('/confirm/:id', confirmBooking );
+router.post('/cancelBooking/:id', cancelBooking);
 router.patch('/deliver/:id', verifyToken, deliverVehicle);
 router.patch('/return/:id', verifyToken, returnVehicle);
 router.get("/userBookings", verifyToken, getBookingByUserId);

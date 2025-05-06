@@ -24,28 +24,51 @@ const checkBufferTime = async (vehicleId, fromTime, toTime) => {
   }
   return true;
 };
-
+const isDateRangeAvailable = (blackoutDates, startDate, endDate) => {
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  
+  // Check if any blackout date falls within the requested range
+  return !blackoutDates.some(blackoutDate => {
+    const blackout = new Date(blackoutDate);
+    return blackout >= start && blackout <= end;
+  });
+};
 // --- Atomic Booking Creation with Buffer, Payment, Promo, Price, Audit, Channel ---
 const createBooking = async (req, res) => {
   try {
     const { user, idVehicle, from, to, fromTime, toTime, intercity, cityName, driver, termsAccepted, paymentStatus, promoCode, bookingChannel, ...bookingData } = req.body;
 
-    // Validate required fields (as before)
+    // Validate required fields
     if (!user || !idVehicle || !from || !to || !fromTime || !toTime) {
       return res.status(400).json({ success: false, error: "Missing required fields" });
     }
 
-    // Validate user and vehicle
+    // Validate user
     const userDoc = await User.findById(user);
     if (!userDoc || userDoc.isBlocked) {
       return res.status(403).json({ success: false, error: "User not found or blocked" });
     }
+
+    // Validate vehicle
     const vehicleDoc = await Vehicle.findById(idVehicle);
-    if (!vehicleDoc || vehicleDoc.status !== 'available' || vehicleDoc.isDeleted) {
-      return res.status(403).json({ success: false, error: "Vehicle not available" });
+    if (!vehicleDoc || vehicleDoc.isDeleted) {
+      return res.status(404).json({ success: false, error: "Vehicle not found" });
     }
 
-    // Buffer time and double-booking prevention
+    // Check blackout dates first
+    if (vehicleDoc.blackoutDates && vehicleDoc.blackoutDates.length > 0) {
+      const isAvailable = isDateRangeAvailable(vehicleDoc.blackoutDates, from, to);
+      if (!isAvailable) {
+        return res.status(409).json({ 
+          success: false, 
+          error: "Vehicle is not available for the selected dates (blackout period)" 
+        });
+      }
+    }
+
+
+    // Existing buffer time and double-booking checks
     const bufferOk = await checkBufferTime(idVehicle, fromTime, toTime);
     if (!bufferOk) {
       return res.status(409).json({ success: false, error: 'Vehicle is not available for the selected time (buffer conflict).' });
