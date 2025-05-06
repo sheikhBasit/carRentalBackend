@@ -15,7 +15,7 @@ const {
 
 router.delete('/', vehicleController.deleteAllVehicles);
 
-router.post('/postVehicle', upload.array("carImagesUrls", 3), vehicleController.createVehicle);
+router.post('/postVehicle', upload.array("carImageUrls", 3), vehicleController.createVehicle);
 router.get('/getVehicle', vehicleController.getAllVehicles);
 router.get('/getCityVehicle', vehicleController.getAllCityVehicles);
 router.get('/fetchVehicles',vehicleController.fetchAllVehicles);
