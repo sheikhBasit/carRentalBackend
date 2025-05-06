@@ -32,7 +32,7 @@ const uploadOnCloudinary = (buffer) => {
           console.log(secureUrl)
           
           // Check if URL already has an image extension
-          const hasImageExt = /\.(jpg|jpeg|png|webp|gif)$/i.test(url);
+          const hasImageExt = /\.(jpg|jpeg|png)$/i.test(url);
           
           // If not, create URL with extension
           const finalUrl = hasImageExt ? url : `${url}.jpg`;
