@@ -142,16 +142,16 @@ const cancelBooking = async (req, res) => {
     const { user, reason } = req.body;
     const booking = await Booking.findById(id);
     if (!booking) return res.status(404).json({ success: false, error: 'Booking not found' });
-    if (booking.status === 'cancelled') return res.status(400).json({ success: false, error: 'Already cancelled' });
+    if (booking.status === 'canceled') return res.status(400).json({ success: false, error: 'Already canceled' });
     // Refund logic: flexible (full), moderate (50%), strict (none)
     let refund = 0;
     if (booking.cancellationPolicy === 'flexible') refund = booking.priceDetails?.total || 0;
     else if (booking.cancellationPolicy === 'moderate') refund = (booking.priceDetails?.total || 0) * 0.5;
     // strict: no refund
-    booking.status = 'cancelled';
+    booking.status = 'canceled';
     booking.refundAmount = refund;
     booking.cancellationReason = reason || '';
-    booking.auditLogs.push({ action: 'cancelled', by: user, details: reason, at: new Date() });
+    booking.auditLogs.push({ action: 'canceled', by: user, details: reason, at: new Date() });
     await booking.save();
     // Mark vehicle as available
     const vehicleDoc = await Vehicle.findById(booking.idVehicle);
@@ -193,15 +193,15 @@ const cancelBooking = async (req, res) => {
       if (userDoc && userDoc.fcmToken) {
         await sendUserPushNotification(
           userDoc._id,
-          'Booking Cancelled',
-          `Your booking for ${vehicleDoc.model || vehicleDoc.manufacturer || 'vehicle'} from ${booking.from} to ${booking.to} has been cancelled.`
+          'Booking canceled',
+          `Your booking for ${vehicleDoc.model || vehicleDoc.manufacturer || 'vehicle'} from ${booking.from} to ${booking.to} has been canceled.`
         );
       }
       if (companyDoc && companyDoc.fcmToken) {
         await sendCompanyPushNotification(
           companyDoc._id,
-          'Booking Cancelled',
-          `A booking for ${vehicleDoc.model || vehicleDoc.manufacturer || 'vehicle'} from ${booking.from} to ${booking.to} has been cancelled.`
+          'Booking canceled',
+          `A booking for ${vehicleDoc.model || vehicleDoc.manufacturer || 'vehicle'} from ${booking.from} to ${booking.to} has been canceled.`
         );
       }
     } catch (notifyErr) {
