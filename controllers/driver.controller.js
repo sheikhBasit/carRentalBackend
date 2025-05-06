@@ -701,7 +701,7 @@ exports.deleteDriver = async (req, res) => {
 // Get available drivers for a given date (and optionally time)
 exports.getAvailableDriversByDate = async (req, res) => {
   try {
-    const { date, time, needDriver } = req.query;
+    const { date, time, needDriver, company } = req.query;
     if (!date) {
       return res.status(400).json({ success: false, message: 'Date is required' });
     }
@@ -724,6 +724,11 @@ exports.getAvailableDriversByDate = async (req, res) => {
         { blackoutDates: { $not: { $elemMatch: { $eq: inputDate.toISOString().split('T')[0] } } } }
       ],
     };
+
+    // Add company filter if provided
+    if (company) {
+      matchStage.company = company;
+    }
 
     // If time is provided, filter by time window
     let drivers = await Driver.find(matchStage);
