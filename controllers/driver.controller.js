@@ -3,50 +3,67 @@ const { uploadOnCloudinary } = require('../utils/connectCloudinary.js');
 const mongoose = require('mongoose');
 const Booking = require('../models/booking.model.js');
 
-// exports.createDriver = async (req, res) => {
-//   try {
-//     console.log(req.body);
-//     console.log(req.files); // Debugging - See what file is received
+// Parse availability data - helper function
+const parseAvailability = (reqBody) => {
+  let availability = {};
+  
+  // Case 1: Availability comes as a JSON string or object
+  if (reqBody.availability) {
+    try {
+      availability = typeof reqBody.availability === 'string' 
+        ? JSON.parse(reqBody.availability)
+        : reqBody.availability;
+      
+      // Validate required fields
+      if (!availability.days || !availability.startTime || !availability.endTime) {
+        throw new Error('Incomplete availability data');
+      }
+      
+      return availability;
+    } catch (e) {
+      console.error("Error parsing availability", e);
+    }
+  }
+  
+  // Case 2: Old format with bracket notation
+  if (reqBody['availability[days]']) {
+    try {
+      let days = reqBody['availability[days]'];
+      if (typeof days === 'string') {
+        days = JSON.parse(days);
+      }
+      
+      availability = {
+        days: days,
+        startTime: reqBody['availability[startTime]'] || '08:00',
+        endTime: reqBody['availability[endTime]'] || '20:00'
+      };
+      
+      return availability;
+    } catch (e) {
+      console.error("Error parsing old format availability", e);
+    }
+  }
+  
+  // Default availability if parsing fails
+  return {
+    days: [],
+    startTime: '08:00',
+    endTime: '20:00'
+  };
+};
 
-//     let profileImageLocalPath;
-//     if (req.files && req.files.profileimg && req.files.profileimg.length > 0) {
-//       profileImageLocalPath = req.files.profileimg[0].path;
-//     }
-
-//     if (!profileImageLocalPath) {
-//       return res.status(400).json({ message: "Profile image is required" });
-//     }
-
-//     // Upload to Cloudinary
-//     const profileImageUrl = await uploadOnCloudinary(profileImageLocalPath);
-//     if (!profileImageUrl) {
-//       return res.status(500).json({ message: "Image upload failed" });
-//     }
-
-//     // Save to DB
-//     const driver = new Driver({
-//       ...req.body,
-//       profileimg: profileImageUrl.url, // Store Cloudinary URL in DB
-//     });
-
-//     await driver.save();
-
-//     return res.status(201).json({
-//       message: "Driver created successfully",
-//       driver,
-//     });
-//   } catch (error) {
-//     return res.status(500).json({ error: error.message });
-//   }
-// };
-
-// Get all drivers
 exports.createDriver = async (req, res) => {
   try {
-    // Log received data for debugging
-    console.log("Received form data:", req.body);
-    console.log("Received files:", req.files);
+    // Enhanced logging
+    console.log("Received form data:", JSON.stringify(req.body, null, 2));
+    console.log("Received files:", req.files?.map(f => ({
+      fieldname: f.fieldname,
+      originalname: f.originalname,
+      size: f.size
+    })));
 
+    // Destructure required fields
     const {
       name,
       company,
@@ -59,20 +76,8 @@ exports.createDriver = async (req, res) => {
       baseDailyRate
     } = req.body;
 
-    // Format phone number before validation
-    const formattedPhNo = phNo.replace(/\s/g, ''); // Remove any spaces
-    const cleanNumber = formattedPhNo.replace(/[^\d+]/g, ''); // Remove all non-digit characters except +
-    
-    // Check if it's a valid Pakistani mobile number
-    if (!cleanNumber.match(/^((\+92|0)3[0-9]{9})$/)) {
-      return res.status(400).json({
-        success: false,
-        error: "Invalid phone number format. Please use format: +923XX-XXXXXXX or 03XX-XXXXXXX"
-      });
-    }
-
     // Validate required fields
-    if (!name || !company || !license || !cnic || !formattedPhNo || !age || 
+    if (!name || !company || !license || !cnic || !phNo || !age || 
         !experience || !baseHourlyRate || !baseDailyRate) {
       return res.status(400).json({ 
         success: false,
@@ -80,7 +85,18 @@ exports.createDriver = async (req, res) => {
       });
     }
 
-    // Validate profile image
+    // Phone number validation
+    const formattedPhNo = phNo.replace(/\s/g, '');
+    const cleanNumber = formattedPhNo.replace(/[^\d+]/g, '');
+    
+    if (!cleanNumber.match(/^((\+92|0)3[0-9]{9})$/)) {
+      return res.status(400).json({
+        success: false,
+        error: "Invalid phone number format. Please use format: +923XX-XXXXXXX or 03XX-XXXXXXX"
+      });
+    }
+
+    // Profile image validation
     if (!req.files?.profileimg || req.files.profileimg.length === 0) {
       return res.status(400).json({ 
         success: false,
@@ -88,7 +104,7 @@ exports.createDriver = async (req, res) => {
       });
     }
 
-    // Check for existing driver with same license or CNIC
+    // Check for existing driver
     const existingDriver = await Driver.findOne({
       $or: [
         { license: license.toUpperCase() },
@@ -121,53 +137,31 @@ exports.createDriver = async (req, res) => {
       });
     }
 
-    // Parse availability data
-    let availability = {};
-    if (req.body['availability[days]']) {
-      // Parse as an array if it's coming as a string
-      let days = req.body['availability[days]'];
-      if (typeof days === 'string') {
-        days = JSON.parse(days);
-      }
-      
-      availability = {
-        days: days,
-        startTime: req.body['availability[startTime]'] || '08:00',
-        endTime: req.body['availability[endTime]'] || '20:00'
-      };
-    }
-
-    // Parse pricing tiers data
-    let pricingTiers = [];
-    // Check if pricingTiers were submitted in indexed format
+    // Parse all data fields
+    const availability = parseAvailability(req.body);
+    
+    // Parse pricing tiers
+    const pricingTiers = [];
     const pricingTierKeys = Object.keys(req.body).filter(key => key.startsWith('pricingTiers['));
     if (pricingTierKeys.length > 0) {
-      // Extract index values from keys like pricingTiers[0][vehicleType]
       const indices = [...new Set(pricingTierKeys.map(key => {
         const match = key.match(/pricingTiers\[(\d+)\]/);
         return match ? parseInt(match[1]) : null;
       }).filter(index => index !== null))];
       
-      // Construct pricingTiers array
-      pricingTiers = indices.map(index => {
-        return {
-          vehicleType: req.body[`pricingTiers[${index}][vehicleType]`],
-          hourlyRate: parseFloat(req.body[`pricingTiers[${index}][hourlyRate]`]),
-          dailyRate: parseFloat(req.body[`pricingTiers[${index}][dailyRate]`])
-        };
-      });
+      pricingTiers.push(...indices.map(index => ({
+        vehicleType: req.body[`pricingTiers[${index}][vehicleType]`],
+        hourlyRate: parseFloat(req.body[`pricingTiers[${index}][hourlyRate]`]),
+        dailyRate: parseFloat(req.body[`pricingTiers[${index}][dailyRate]`])
+      })));
     }
 
     // Parse blackout dates
-    let blackoutDates = [];
-    // Check if blackoutDates were submitted in indexed format
-    const blackoutDateKeys = Object.keys(req.body).filter(key => key.startsWith('blackoutDates['));
-    if (blackoutDateKeys.length > 0) {
-      // Extract dates
-      blackoutDates = blackoutDateKeys.map(key => new Date(req.body[key]));
-    }
+    const blackoutDates = Object.keys(req.body)
+      .filter(key => key.startsWith('blackoutDates['))
+      .map(key => new Date(req.body[key]));
 
-    // Create new driver
+    // Create driver object
     const driver = new Driver({
       name,
       company,
@@ -179,22 +173,21 @@ exports.createDriver = async (req, res) => {
       profileimg: profileImageUrl,
       baseHourlyRate: parseFloat(baseHourlyRate),
       baseDailyRate: parseFloat(baseDailyRate),
-      pricingTiers: pricingTiers,
-      availability: availability,
-      blackoutDates: blackoutDates,
-      currentPromotion: null,  // Default to null
+      pricingTiers,
+      availability,
+      blackoutDates,
+      currentPromotion: req.body['currentPromotion[discountPercentage]'] ? {
+        discountPercentage: parseFloat(req.body['currentPromotion[discountPercentage]']),
+        validUntil: req.body['currentPromotion[validUntil]'] 
+          ? new Date(req.body['currentPromotion[validUntil]']) 
+          : null
+      } : null
     });
 
-    // If currentPromotion data exists, add it
-    if (req.body['currentPromotion[discountPercentage]']) {
-      driver.currentPromotion = {
-        discountPercentage: parseFloat(req.body['currentPromotion[discountPercentage]']),
-        validUntil: req.body['currentPromotion[validUntil]'] ? new Date(req.body['currentPromotion[validUntil]']) : null
-      };
-    }
-
+    // Save driver
     await driver.save();
 
+    // Return success response
     return res.status(201).json({
       success: true,
       message: "Driver created successfully",
@@ -215,7 +208,6 @@ exports.createDriver = async (req, res) => {
     });
   }
 };
-
 exports.getAllDrivers = async (req, res) => {
   try {
     const {
