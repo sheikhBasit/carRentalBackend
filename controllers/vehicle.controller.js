@@ -105,7 +105,6 @@ exports.createVehicle = async (req, res) => {
       model,
       year,
       rent,
-      capacity,
       transmission,
       fuelType,
       vehicleType,
@@ -123,7 +122,7 @@ exports.createVehicle = async (req, res) => {
 
     // Validate required fields
     if (!companyId || !numberPlate || !manufacturer || !model || !year || !rent || 
-        !capacity || !transmission || !fuelType || !vehicleType || !insuranceExpiry) {
+        !transmission || !fuelType || !vehicleType || !insuranceExpiry) {
       return res.status(400).json({ 
         success: false,
         message: "Missing required fields" 
@@ -187,7 +186,6 @@ exports.createVehicle = async (req, res) => {
       year,
       carImageUrls,
       rent,
-      capacity,
       transmission,
       fuelType,
       vehicleType,
@@ -239,8 +237,6 @@ exports.getAllVehicles = async (req, res) => {
       maxRent,
       transmission,
       fuelType,
-      minCapacity,
-      maxCapacity
     } = req.query;
 
     const normalizedCity = city?.toLowerCase().replace(/\s+/g, "00");
@@ -290,12 +286,7 @@ exports.getAllVehicles = async (req, res) => {
     if (fuelType) {
       matchStage.fuelType = fuelType;
     }
-    if (minCapacity || maxCapacity) {
-      matchStage.capacity = {};
-      if (minCapacity) matchStage.capacity.$gte = Number(minCapacity);
-      if (maxCapacity) matchStage.capacity.$lte = Number(maxCapacity);
-    }
-
+   
     const aggregationPipeline = [
       {
         $lookup: {
@@ -751,7 +742,6 @@ exports.updateVehicle = async (req, res) => {
       model,
       year,
       rent,
-      capacity,
       transmission,
       fuelType,
       vehicleType,
@@ -854,7 +844,6 @@ exports.updateVehicle = async (req, res) => {
       ...(model && { model: model.toLowerCase() }),
       ...(year && { year }),
       ...(rent && { rent }),
-      ...(capacity && { capacity }),
       ...(transmission && { transmission }),
       ...(fuelType && { fuelType }),
       ...(vehicleType && { vehicleType }),
