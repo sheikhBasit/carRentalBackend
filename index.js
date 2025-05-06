@@ -6,7 +6,7 @@ const cookieParser = require('cookie-parser');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
-
+const { startScheduledTasks, stopScheduledTasks } = require('./scheduledNotifications');
 const app = express();
 
 // ====================== CORS Configuration ======================
@@ -212,11 +212,7 @@ app.use((err, req, res, next) => {
 });
 
 // ====================== Server Setup ======================
-const PORT = process.env.PORT || 5000;
-require('./scheduledNotifications');
-const server = app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+
 
 // // Graceful shutdown
 // process.on('SIGTERM', () => {
@@ -241,8 +237,60 @@ const server = app.listen(PORT, () => {
 //   });
 // });
 
+// process.on('SIGTERM', async () => {
+//   console.log('SIGTERM received. Shutting down gracefully');
+//   server.close(async () => {
+//     console.log('Server closed');
+//     try {
+//       await mongoose.connection.close(false);
+//       console.log('MongoDB connection closed');
+//       process.exit(0);
+//     } catch (error) {
+//       console.error('Error closing MongoDB connection:', error);
+//       process.exit(1);
+//     }
+//   });
+// });
+
+// process.on('SIGINT', async () => {
+//   console.log('SIGINT received. Shutting down gracefully');
+//   server.close(async () => {
+//     console.log('Server closed');
+//     try {
+//       await mongoose.connection.close(false);
+//       console.log('MongoDB connection closed');
+//       process.exit(0);
+//     } catch (error) {
+//       console.error('Error closing MongoDB connection:', error);
+//       process.exit(1);
+//     }
+//   });
+// });
+const PORT = process.env.PORT || 5000;
+let scheduledTasksRunning = [];
+
+const server = app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+  
+  // Start cron jobs only after the server is successfully listening
+  if (mongoose.connection.readyState === 1) {
+    scheduledTasksRunning = startScheduledTasks();
+    console.log('Scheduled tasks started successfully');
+  } else {
+    console.log('Database not connected. Scheduled tasks will start after database connection');
+    mongoose.connection.once('connected', () => {
+      scheduledTasksRunning = startScheduledTasks();
+      console.log('Scheduled tasks started after database connection');
+    });
+  }
+});
+
+// Update your graceful shutdown handlers to stop cron jobs before closing
 process.on('SIGTERM', async () => {
   console.log('SIGTERM received. Shutting down gracefully');
+  // Stop all scheduled tasks first
+  stopScheduledTasks();
+  
   server.close(async () => {
     console.log('Server closed');
     try {
@@ -258,6 +306,9 @@ process.on('SIGTERM', async () => {
 
 process.on('SIGINT', async () => {
   console.log('SIGINT received. Shutting down gracefully');
+  // Stop all scheduled tasks first
+  stopScheduledTasks();
+  
   server.close(async () => {
     console.log('Server closed');
     try {
@@ -271,5 +322,27 @@ process.on('SIGINT', async () => {
   });
 });
 
+// If you need to manually control the cron jobs for testing or maintenance
+app.get('/api/admin/cron/status', (req, res) => {
+  res.json({
+    cronJobsRunning: scheduledTasksRunning.length > 0,
+    jobCount: scheduledTasksRunning.length
+  });
+});
+
+app.post('/api/admin/cron/start', (req, res) => {
+  if (scheduledTasksRunning.length === 0) {
+    scheduledTasksRunning = startScheduledTasks();
+    res.json({ success: true, message: 'Scheduled tasks started' });
+  } else {
+    res.json({ success: false, message: 'Scheduled tasks already running' });
+  }
+});
+
+app.post('/api/admin/cron/stop', (req, res) => {
+  stopScheduledTasks();
+  scheduledTasksRunning = [];
+  res.json({ success: true, message: 'Scheduled tasks stopped' });
+});
 
 module.exports = app;

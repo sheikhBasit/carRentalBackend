@@ -122,13 +122,22 @@ exports.createVehicle = async (req, res) => {
     console.log(req.body)
     // Validate required fields
     if (!companyId || !numberPlate || !manufacturer || !model || !year || !rent || 
-        !transmission || !fuelType || !vehicleType ) {
+       !fuelType || !vehicleType ) {
       return res.status(400).json({ 
         success: false,
         message: "Missing required fields" 
       });
     }
     
+    if(!req.body.transmission){
+      transmission = req.body.features.transmission
+    }
+    if(!req.body.fuelType){
+      fuelType = req.body.features.fuelType
+    }
+    if(!req.body.capacity){
+      capacity = req.body.features.seats
+    }
     // Validate availability
     if (!availability || !availability.days || !availability.startTime || !availability.endTime) {
       return res.status(400).json({ 
@@ -190,6 +199,7 @@ exports.createVehicle = async (req, res) => {
       carImageUrls,
       rent,
       transmission,
+      capacity,
       fuelType,
       vehicleType,
       features: features || [],

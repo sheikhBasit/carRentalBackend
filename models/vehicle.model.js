@@ -80,13 +80,20 @@ const vehicleSchema = new mongoose.Schema({
     required: true,
     min: 0 
   },
-  
+  capacity: { 
+    type: Number, 
+    required: false,
+    min: 1,
+    max: 20 
+  },
+  transmission: { type: String, enum: ['automatic', 'manual','Auto','Manual'], required: false },
+
   features: {
-    transmission: { type: String, enum: ['automatic', 'manual'], required: true },
-    fuelType: { type: String, enum: ['petrol', 'diesel', 'hybrid', 'electric'], required: true },
-    seats: { type: Number, min: 2, max: 15, required: true },
+    transmission: { type: String, enum: ['automatic', 'manual'], required: false },
+    fuelType: { type: String, enum: ['petrol', 'diesel', 'hybrid', 'electric'], required: false },
+    seats: { type: Number, min: 2, max: 15, required: false },
     luggage: { type: Number, min: 0, max: 10 },
-    ac: { type: Boolean, default: true },
+    ac: { type: Boolean, default: false },
     bluetooth: { type: Boolean, default: false },
     gps: { type: Boolean, default: false }
   },
