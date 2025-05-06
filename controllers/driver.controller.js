@@ -43,6 +43,10 @@ const Booking = require('../models/booking.model.js');
 // Get all drivers
 exports.createDriver = async (req, res) => {
   try {
+    // Log received data for debugging
+    console.log("Received form data:", req.body);
+    console.log("Received files:", req.files);
+
     const {
       name,
       company,
@@ -52,11 +56,7 @@ exports.createDriver = async (req, res) => {
       age,
       experience,
       baseHourlyRate,
-      baseDailyRate,
-      pricingTiers,
-      currentPromotion,
-      availability,
-      blackoutDates
+      baseDailyRate
     } = req.body;
 
     // Format phone number before validation
@@ -73,7 +73,7 @@ exports.createDriver = async (req, res) => {
 
     // Validate required fields
     if (!name || !company || !license || !cnic || !formattedPhNo || !age || 
-        !experience || !baseHourlyRate || !baseDailyRate || !availability) {
+        !experience || !baseHourlyRate || !baseDailyRate) {
       return res.status(400).json({ 
         success: false,
         message: "Missing required fields" 
@@ -121,23 +121,77 @@ exports.createDriver = async (req, res) => {
       });
     }
 
+    // Parse availability data
+    let availability = {};
+    if (req.body['availability[days]']) {
+      // Parse as an array if it's coming as a string
+      let days = req.body['availability[days]'];
+      if (typeof days === 'string') {
+        days = JSON.parse(days);
+      }
+      
+      availability = {
+        days: days,
+        startTime: req.body['availability[startTime]'] || '08:00',
+        endTime: req.body['availability[endTime]'] || '20:00'
+      };
+    }
+
+    // Parse pricing tiers data
+    let pricingTiers = [];
+    // Check if pricingTiers were submitted in indexed format
+    const pricingTierKeys = Object.keys(req.body).filter(key => key.startsWith('pricingTiers['));
+    if (pricingTierKeys.length > 0) {
+      // Extract index values from keys like pricingTiers[0][vehicleType]
+      const indices = [...new Set(pricingTierKeys.map(key => {
+        const match = key.match(/pricingTiers\[(\d+)\]/);
+        return match ? parseInt(match[1]) : null;
+      }).filter(index => index !== null))];
+      
+      // Construct pricingTiers array
+      pricingTiers = indices.map(index => {
+        return {
+          vehicleType: req.body[`pricingTiers[${index}][vehicleType]`],
+          hourlyRate: parseFloat(req.body[`pricingTiers[${index}][hourlyRate]`]),
+          dailyRate: parseFloat(req.body[`pricingTiers[${index}][dailyRate]`])
+        };
+      });
+    }
+
+    // Parse blackout dates
+    let blackoutDates = [];
+    // Check if blackoutDates were submitted in indexed format
+    const blackoutDateKeys = Object.keys(req.body).filter(key => key.startsWith('blackoutDates['));
+    if (blackoutDateKeys.length > 0) {
+      // Extract dates
+      blackoutDates = blackoutDateKeys.map(key => new Date(req.body[key]));
+    }
+
     // Create new driver
     const driver = new Driver({
       name,
       company,
       license: license.toUpperCase(),
       cnic,
-      phNo: formattedPhNo, // Keep the original format with hyphens if present
-      age,
-      experience,
+      phNo: formattedPhNo,
+      age: parseInt(age),
+      experience: parseInt(experience),
       profileimg: profileImageUrl,
-      baseHourlyRate,
-      baseDailyRate,
-      pricingTiers: pricingTiers || [],
-      currentPromotion: currentPromotion || null,
-      availability,
-      blackoutDates: blackoutDates || [],
+      baseHourlyRate: parseFloat(baseHourlyRate),
+      baseDailyRate: parseFloat(baseDailyRate),
+      pricingTiers: pricingTiers,
+      availability: availability,
+      blackoutDates: blackoutDates,
+      currentPromotion: null,  // Default to null
     });
+
+    // If currentPromotion data exists, add it
+    if (req.body['currentPromotion[discountPercentage]']) {
+      driver.currentPromotion = {
+        discountPercentage: parseFloat(req.body['currentPromotion[discountPercentage]']),
+        validUntil: req.body['currentPromotion[validUntil]'] ? new Date(req.body['currentPromotion[validUntil]']) : null
+      };
+    }
 
     await driver.save();
 
