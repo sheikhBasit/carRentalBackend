@@ -1,7 +1,13 @@
 const RentalCompany = require('../models/rentalcompany.model.js');
 const bcrypt = require('bcrypt');
 const { uploadOnCloudinary } = require('../utils/connectCloudinary.js'); // Ensure this file exists
-const jwt = require('jsonwebtoken')
+const jwt = require('jsonwebtoken');
+const {
+  sendVerificationEmail,
+  sendWelcomeEmail,
+  sendPasswordResetEmail,
+  sendResetSuccessEmail,
+} = require('../mailtrap/email.js');
 // Create a new rental company
 // exports.createRentalCompany = async (req, res) => {
 //   try {
@@ -148,6 +154,90 @@ exports.createRentalCompany = async (req, res) => {
     });
   }
 };
+
+// Verify email
+exports.verifyEmail = async (req, res) => {
+  const { code } = req.body;
+  
+  if (!code) {
+    return res.status(400).json({ success: false, message: 'Verification code is required' });
+  }
+  
+  try {
+    // Find the user with the provided verification code and ensure the token has not expired
+    const user = await RentalCompany.findOne({
+    verificationToken: code,
+    verificationTokenExpiresAt: { $gt: Date.now() }, // Ensure the token is not expired
+    });
+  
+    if (!user) {
+    return res.status(400).json({ success: false, message: 'Invalid or expired verification code' });
+    }
+  
+    // Update user as verified
+    user.isVerified = true;
+    user.verificationToken = undefined; // Clear the verification token
+    user.verificationTokenExpiresAt = undefined; // Clear the expiration time
+    await user.save();
+  
+    // Send welcome email
+    try {
+    await sendWelcomeEmail(user.email, user.companyName);
+    } catch (emailError) {
+    console.error('Error sending welcome email:', emailError.message);
+    }
+  
+    // Return success response with user data (excluding sensitive fields)
+    const { password, verificationToken, verificationTokenExpiresAt, ...userSafeData } = user._doc;
+  
+    return res.status(200).json({
+    success: true,
+    message: 'Email verified successfully',
+    user: userSafeData,
+    });
+  } catch (error) {
+    console.error('Error in verifyEmail:', error);
+    return  res.status(500).json({ success: false, message: 'Server error' });
+  }
+  };
+
+  // Add to userController.js
+exports.resendVerification = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    if (user.isVerified) {
+      return res.status(400).json({ success: false, message: 'Email already verified' });
+    }
+
+    // Generate new verification code (6 digits)
+    const newCode = Math.floor(100000 + Math.random() * 900000).toString();
+    user.verificationCode = newCode;
+    await user.save();
+
+    // In a real app, you would send this code via email
+    console.log(`New verification code for ${email}: ${newCode}`);
+
+    res.status(200).json({
+      success: true,
+      message: 'New verification code sent'
+    });
+
+  } catch (error) {
+    res.status(500).json({ 
+      success: false, 
+      message: 'Failed to resend verification code',
+      error: error.message 
+    });
+  }
+};
+
+
 // Get all rental companies
 exports.getAllRentalCompanies = async (req, res) => {
   try {

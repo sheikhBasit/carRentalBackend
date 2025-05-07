@@ -11,5 +11,6 @@ router.get('/getRental', rentalCompanyController.getAllRentalCompanies);
 router.get('/:id', rentalCompanyController.getRentalCompanyById);
 router.put('/:id', rentalCompanyController.updateRentalCompany);
 router.delete('/:id', rentalCompanyController.deleteRentalCompany);
-
+router.post('/verify/rental-company', rentalCompanyController.verifyEmail);
+router.post('/resend-verification/rental-company', rentalCompanyController.resendVerification);
 module.exports = router;

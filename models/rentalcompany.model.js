@@ -14,6 +14,9 @@ const rentalCompanySchema = new mongoose.Schema({
   address: { type: String, required: true },
   city: { type: String, required: true },
   province: { type: String, required: true },
+  isVerified: { type: Boolean, default: false },
+  verificationToken: String,
+  verificationTokenExpiresAt: Date,
   fcmToken: { type: String, required: false }, // Optional field for Firebase Cloud Messaging token
 }, {
   timestamps: true // Automatically adds createdAt and updatedAt fields
