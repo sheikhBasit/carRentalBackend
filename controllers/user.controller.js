@@ -81,16 +81,19 @@ exports.createUser = async (req, res) => {
     generateTokenAndSetCookie(res, user._id);
 
     let emailSent = false;
+    let emailError = null;
     try {
       await sendVerificationEmail(user.email, verificationToken);
       emailSent = true;
     } catch (emailError) {
+      emailError = emailError;
       console.error('Email sending error:', emailError);
     }
 
     res.status(201).json({ 
       message: 'User created successfully', 
       emailSent,
+      emailError,
       user: { 
         ...user.toObject(), 
         password: undefined,
