@@ -464,11 +464,35 @@ const getBookingByUserId = async (req, res) => {
       return res.status(400).json({ message: "User ID is required" });
     }
 
+    const now = new Date();
+    const today = now.toISOString().split('T')[0]; // Get current date in YYYY-MM-DD format
+
+    // Update bookings that should be marked as ongoing
+    await Booking.updateMany(
+      {
+        user: new mongoose.Types.ObjectId(userId),
+        status: 'confirmed',
+        from: { $lte: today }, // from date is in past or today
+        to: { $gte: today }    // to date is in future or today
+      },
+      { $set: { status: 'ongoing' } }
+    );
+
+    // Update bookings that should be marked as completed
+    await Booking.updateMany(
+      {
+        user: new mongoose.Types.ObjectId(userId),
+        status: { $in: ['confirmed', 'ongoing'] }, // Check both statuses
+        to: { $lt: today } // to date is in the past
+      },
+      { $set: { status: 'completed' } }
+    );
+
     const bookings = await Booking.aggregate([
       {
         $match: {
-          user: new mongoose.Types.ObjectId(userId), // Convert userId to ObjectId
-          ...(status && { status }), // Only filter by status if provided
+          user: new mongoose.Types.ObjectId(userId),
+          ...(status && { status }),
         },
       },
       {
