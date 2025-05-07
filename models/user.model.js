@@ -47,7 +47,7 @@ const userSchema = new mongoose.Schema({
   verificationPasswordToken: Date,
   verificationTokenExpiresAt: Date,
   // --- RBAC and Compliance Fields ---
-  role: { type: String, enum: ['customer', 'host', 'admin'], default: 'customer', required: true },
+  role: { type: String, enum: ['customer', 'host', 'admin'], default: 'customer', required: false },
   isBlocked: { type: Boolean, default: false },
   notificationPreferences: {
     email: { type: Boolean, default: true },
