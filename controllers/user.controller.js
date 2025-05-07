@@ -78,7 +78,7 @@ exports.createUser = async (req, res) => {
     });
 
     await user.save();
-    generateTokenAndSetCookie(res, user._id);
+    const token = generateTokenAndSetCookie(res, user._id);
 
     let emailSent = false;
     let emailError = null;
@@ -94,6 +94,7 @@ exports.createUser = async (req, res) => {
       message: 'User created successfully', 
       emailSent,
       emailError,
+      token,
       user: { 
         ...user.toObject(), 
         password: undefined,

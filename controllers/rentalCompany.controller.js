@@ -130,7 +130,7 @@ exports.createRentalCompany = async (req, res) => {
     });
 
     await rentalCompany.save();
-    generateTokenAndSetCookie(res, rentalCompany._id);
+    const token = generateTokenAndSetCookie(res, rentalCompany._id);
 
     // Remove sensitive data from response
     const companyResponse = rentalCompany.toObject();
@@ -150,6 +150,7 @@ exports.createRentalCompany = async (req, res) => {
       success: true,
       emailSent,
       emailError,
+      token,
       message: "Rental company created successfully",
       company: companyResponse
     });
@@ -311,6 +312,7 @@ exports.getRentalCompanyByEmail = async (req, res) => {
     // Successful authentication response
     return res.status(200).json({
       success: true,
+      token,
       message: 'Login successful',
       company, // Corrected this part
     });
