@@ -13,18 +13,15 @@ exports.createUser = async (req, res) => {
   try {
     const { email, password, ...userData } = req.body;
 
-    // Validate required fields
     if (!email || !password) {
       return res.status(400).json({ message: 'Email and password are required' });
     }
 
-    // Check if user exists
     const existingUser = await User.findOne({ email });
     if (existingUser) {
       return res.status(400).json({ message: 'Email already in use' });
     }
 
-    // Helper function to safely upload files
     const uploadFile = async (file) => {
       if (!file || file.length === 0) return null;
       try {
@@ -36,7 +33,6 @@ exports.createUser = async (req, res) => {
       }
     };
 
-    // Upload all files in parallel
     const [
       cnicFrontUrl,
       cnicBackUrl,
@@ -46,12 +42,11 @@ exports.createUser = async (req, res) => {
     ] = await Promise.all([
       uploadFile(req.files?.cnicFront),
       uploadFile(req.files?.cnicBack),
-      uploadFile(req.files?.licenseFront),  // Will be null if not provided
-      uploadFile(req.files?.licenseBack),   // Will be null if not provided
+      uploadFile(req.files?.licenseFront),
+      uploadFile(req.files?.licenseBack),
       uploadFile(req.files?.profilePic)
     ]);
 
-    // Validate required images (only CNIC and profile pic are required)
     if (!cnicFrontUrl || !cnicBackUrl || !profilePicUrl) {
       return res.status(400).json({ 
         message: 'CNIC (front & back) and profile picture are required',
@@ -65,7 +60,6 @@ exports.createUser = async (req, res) => {
       });
     }
 
-    // Create user
     const hashedPassword = await bcrypt.hash(password, 10);
     const verificationToken = Math.floor(100000 + Math.random() * 900000).toString();
     const normalizedEmail = email.trim().toLowerCase();
@@ -76,8 +70,8 @@ exports.createUser = async (req, res) => {
       password: hashedPassword,
       cnicFrontUrl,
       cnicBackUrl,
-      licenseFrontUrl: licenseFrontUrl || undefined,  // Will be undefined if not provided
-      licenseBackUrl: licenseBackUrl || undefined,    // Will be undefined if not provided
+      licenseFrontUrl: licenseFrontUrl || undefined,
+      licenseBackUrl: licenseBackUrl || undefined,
       profilePic: profilePicUrl,
       verificationToken,
       verificationTokenExpiresAt: Date.now() + 24 * 60 * 60 * 1000,
@@ -86,12 +80,17 @@ exports.createUser = async (req, res) => {
     await user.save();
     generateTokenAndSetCookie(res, user._id);
 
-    // Send verification email (don't await to speed up response)
-    sendVerificationEmail(user.email, verificationToken)
-      .catch(emailError => console.error('Email sending error:', emailError));
+    let emailSent = false;
+    try {
+      await sendVerificationEmail(user.email, verificationToken);
+      emailSent = true;
+    } catch (emailError) {
+      console.error('Email sending error:', emailError);
+    }
 
     res.status(201).json({ 
       message: 'User created successfully', 
+      emailSent,
       user: { 
         ...user.toObject(), 
         password: undefined,
@@ -107,6 +106,7 @@ exports.createUser = async (req, res) => {
     });
   }
 };
+
 // Create a new user
 // exports.createUser = async (req, res) => {
 //   try {
@@ -333,6 +333,42 @@ exports.verifyEmail = async (req, res) => {
 	  return  res.status(500).json({ success: false, message: 'Server error' });
 	}
   };
+
+  // Add to userController.js
+exports.resendVerification = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    if (user.isVerified) {
+      return res.status(400).json({ success: false, message: 'Email already verified' });
+    }
+
+    // Generate new verification code (6 digits)
+    const newCode = Math.floor(100000 + Math.random() * 900000).toString();
+    user.verificationCode = newCode;
+    await user.save();
+
+    // In a real app, you would send this code via email
+    console.log(`New verification code for ${email}: ${newCode}`);
+
+    res.status(200).json({
+      success: true,
+      message: 'New verification code sent'
+    });
+
+  } catch (error) {
+    res.status(500).json({ 
+      success: false, 
+      message: 'Failed to resend verification code',
+      error: error.message 
+    });
+  }
+};
 // Login
 exports.login = async (req, res) => {
   const { email, password } = req.body;

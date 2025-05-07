@@ -22,6 +22,9 @@ router.get('/all', userController.getAllUsers);
 // Verify email
 router.post('/verify-email', userController.verifyEmail);
 
+// routes/userRoutes.js
+router.post('/resend-verification', userController.resendVerification);
+
 // Get a single user by ID
 router.get('/:id', userController.getUserById);
 

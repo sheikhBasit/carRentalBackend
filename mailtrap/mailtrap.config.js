@@ -11,7 +11,15 @@ const sender = {
   name: "Mailtrap Test",
 };
 
+const transporter = nodemailer.createTransport({
+  host: "sandbox.smtp.mailtrap.io",
+  port: 2525,
+  auth: {
+    user: process.env.MAILTRAP_USER,
+    pass: process.env.MAILTRAP_PASS
+  }
+});
 
-module.exports = {client , sender}
+module.exports = {client , sender , transporter}
 
 
