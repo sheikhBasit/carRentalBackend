@@ -94,7 +94,7 @@ exports.createRentalCompany = async (req, res) => {
       });
     }
 
-    // Upload files to Cloudinary using buffers (consistent with user signup)
+    // Upload files to Cloudinary using buffers (consistent with company signup)
     const uploadFile = async (file) => {
       try {
         if (!file || file.length === 0) return null;
@@ -164,36 +164,36 @@ exports.verifyEmail = async (req, res) => {
   }
   
   try {
-    // Find the user with the provided verification code and ensure the token has not expired
-    const user = await RentalCompany.findOne({
+    // Find the company with the provided verification code and ensure the token has not expired
+    const company = await RentalCompany.findOne({
     verificationToken: code,
     verificationTokenExpiresAt: { $gt: Date.now() }, // Ensure the token is not expired
     });
   
-    if (!user) {
+    if (!company) {
     return res.status(400).json({ success: false, message: 'Invalid or expired verification code' });
     }
   
-    // Update user as verified
-    user.isVerified = true;
-    user.verificationToken = undefined; // Clear the verification token
-    user.verificationTokenExpiresAt = undefined; // Clear the expiration time
-    await user.save();
+    // Update company as verified
+    company.isVerified = true;
+    company.verificationToken = undefined; // Clear the verification token
+    company.verificationTokenExpiresAt = undefined; // Clear the expiration time
+    await company.save();
   
     // Send welcome email
     try {
-    await sendWelcomeEmail(user.email, user.companyName);
+    await sendWelcomeEmail(company.email, company.companyName);
     } catch (emailError) {
     console.error('Error sending welcome email:', emailError.message);
     }
   
-    // Return success response with user data (excluding sensitive fields)
-    const { password, verificationToken, verificationTokenExpiresAt, ...userSafeData } = user._doc;
+    // Return success response with company data (excluding sensitive fields)
+    const { password, verificationToken, verificationTokenExpiresAt, ...companySafeData } = company._doc;
   
     return res.status(200).json({
     success: true,
     message: 'Email verified successfully',
-    user: userSafeData,
+    company: companySafeData,
     });
   } catch (error) {
     console.error('Error in verifyEmail:', error);
@@ -201,24 +201,24 @@ exports.verifyEmail = async (req, res) => {
   }
   };
 
-  // Add to userController.js
+  // Add to companyController.js
 exports.resendVerification = async (req, res) => {
   try {
     const { email } = req.body;
 
-    const user = await User.findOne({ email });
-    if (!user) {
-      return res.status(404).json({ success: false, message: 'User not found' });
+    const company = await RentalCompany.findOne({ email });
+    if (!company) {
+      return res.status(404).json({ success: false, message: 'company not found' });
     }
 
-    if (user.isVerified) {
+    if (company.isVerified) {
       return res.status(400).json({ success: false, message: 'Email already verified' });
     }
 
     // Generate new verification code (6 digits)
     const newCode = Math.floor(100000 + Math.random() * 900000).toString();
-    user.verificationCode = newCode;
-    await user.save();
+    company.verificationCode = newCode;
+    await company.save();
 
     // In a real app, you would send this code via email
     console.log(`New verification code for ${email}: ${newCode}`);
