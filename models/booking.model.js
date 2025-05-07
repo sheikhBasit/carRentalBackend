@@ -26,7 +26,7 @@ const bookingSchema = new Schema(
       default: 'moderate',
     },
     refundAmount: { type: Number, default: 0 },
-    termsAccepted: { type: Boolean, required: true },
+    termsAccepted: { type: Boolean, required: false },
     priceDetails: {
       base: { type: Number, min: 0, default: 0 },
       discount: { type: Number, min: 0, default: 0 },

@@ -1,4 +1,5 @@
 const { MailtrapClient } = require("mailtrap");
+const nodemailer = require('nodemailer');
 
 const client = new MailtrapClient({
   endpoint: process.env.MAILTRAP_ENDPOINT,

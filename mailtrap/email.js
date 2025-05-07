@@ -7,8 +7,8 @@ const sendVerificationEmail = async (email, verificationToken) => {
 
   try {
     const response = await client.send({
-      from: sender,
-      to: recipient,
+    from: `"Drive Fleet" <${process.env.GMAIL_USER}>`,
+    to: recipient,
       subject: "Verify your email",
       html: VERIFICATION_EMAIL_TEMPLATE.replace("{verificationCode}", verificationToken),
       category: "Email verification",
@@ -27,8 +27,8 @@ const sendWelcomeEmail = async (email, name) => {
 
   try {
     const response = await client.send({
-      from: sender,
-      to: recipient,
+    from: `"Drive Fleet" <${process.env.GMAIL_USER}>`,
+    to: recipient,
       template_uuid: "963c643f-f684-4c08-86be-7101b94fccc8",
       template_variables: {
         company_info_name: "Auth Company",
@@ -49,8 +49,8 @@ const sendPasswordResetEmail = async (email, resetURL) => {
 
   try {
     const response = await client.send({
-      from: sender,
-      to: recipient,
+    from: `"Drive Fleet" <${process.env.GMAIL_USER}>`,
+    to: recipient,
       subject: "Reset your password",
       html: PASSWORD_RESET_REQUEST_TEMPLATE.replace("{resetURL}", resetURL),
       category: "Password Reset",
@@ -69,8 +69,8 @@ const sendResetSuccessEmail = async (email) => {
 
   try {
     const response = await client.send({
-      from: sender,
-      to: recipient,
+    from: `"Drive Fleet" <${process.env.GMAIL_USER}>`,
+    to: recipient,
       subject: "Password Reset Successful",
       html: PASSWORD_RESET_SUCCESS_TEMPLATE,
       category: "Password Reset",
@@ -103,7 +103,7 @@ const sendBookingConfirmationEmail = async (email, name, bookingDetails, isCompa
 
   try {
     const response = await client.send({
-      from: sender,
+      from: `"Drive Fleet" <${process.env.GMAIL_USER}>`,
       to: recipient,
       subject,
       html,
