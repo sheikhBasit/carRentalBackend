@@ -6,7 +6,7 @@ const { bookingValidationRules, validate } = require('../utils/validate');
 
 // Define booking routes
 router.post('/postBooking', bookingValidationRules(), validate, createBooking);
-router.post('/confirm/:id', confirmBooking );
+router.post('/confirm/:bookingId', confirmBooking );
 router.post('/cancelBooking/:id', cancelBooking);
 router.patch('/deliver/:id', verifyToken, deliverVehicle);
 router.patch('/return/:id', verifyToken, returnVehicle);

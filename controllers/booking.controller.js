@@ -8,41 +8,72 @@ const {sendBookingConfirmationEmail} = require('../mailtrap/email');
 const { sendUserPushNotification, sendCompanyPushNotification } = require('../utils/firebaseConfig');
 
 // --- ENFORCE BUFFER TIME, PAYMENT, CANCELLATION, AUDIT LOGIC ---
+
 const checkBufferTime = async (vehicleId, fromTime, toTime) => {
   const vehicle = await Vehicle.findById(vehicleId);
-  const bufferMinutes = vehicle.bufferMinutes || 120;
+  const bufferMinutes = vehicle?.bufferMinutes || 120;
   const bufferMs = bufferMinutes * 60 * 1000;
-  
+
   const newStart = new Date(fromTime);
   const newEnd = new Date(toTime);
-  
-  const conflictingBookings = await Booking.find({
+
+  const existingBookings = await Booking.find({
     idVehicle: vehicleId,
-    status: { $in: ['pending', 'confirmed', 'ongoing'] },
-    $or: [
-      // Direct overlap
-      { fromTime: { $lt: newEnd }, toTime: { $gt: newStart } },
-      // Before existing booking with buffer
-      { fromTime: { $lt: new Date(newEnd.getTime() + bufferMs) }, 
-       fromTime: { $gte: newEnd } },
-      // After existing booking with buffer
-      { toTime: { $gt: new Date(newStart.getTime() - bufferMs) }, 
-       toTime: { $lte: newStart } }
-    ]
+    status: { $in: ['pending', 'confirmed', 'ongoing'] }
   });
-  
-  return conflictingBookings.length === 0;
+
+  for (const booking of existingBookings) {
+    const existingStart = new Date(booking.fromTime);
+    const existingEnd = new Date(booking.toTime);
+    const bufferEnd = new Date(existingEnd.getTime() + bufferMs);
+
+    const conflict = (
+      (newStart >= existingStart && newStart < bufferEnd) ||
+      (newEnd > existingStart && newEnd <= bufferEnd) ||
+      (newStart <= existingStart && newEnd >= bufferEnd)
+    );
+
+    if (conflict) {
+      const alreadyExists = vehicle.blackoutPeriods.some(period => {
+        return (
+          new Date(period.from).getTime() === existingEnd.getTime() &&
+          new Date(period.to).getTime() === bufferEnd.getTime()
+        );
+      });
+
+      if (!alreadyExists) {
+        vehicle.blackoutPeriods.push({
+          from: existingEnd,
+          to: bufferEnd,
+          reason: 'buffer',
+          relatedBooking: booking._id
+        });
+        await vehicle.save();
+        console.log(`📅 Blackout period added: ${existingEnd} - ${bufferEnd}`);
+      }
+
+      return {
+        allowed: false,
+        message: `BUFFER CONFLICT: Booking starts within ${bufferMinutes} min buffer after another booking.`
+      };
+    }
+  }
+
+  return { allowed: true, message: 'No buffer conflict.' };
 };
-const isDateRangeAvailable = (blackoutDates, startDate, endDate) => {
+
+
+const isDateRangeAvailable = (blackoutPeriods, startDate, endDate) => {
   const start = new Date(startDate);
   const end = new Date(endDate);
-  
-  // Check if any blackout date falls within the requested range
-  return !blackoutDates.some(blackoutDate => {
-    const blackout = new Date(blackoutDate);
-    return blackout >= start && blackout <= end;
+
+  return !blackoutPeriods.some(period => {
+    const periodStart = new Date(period.start);
+    const periodEnd = new Date(period.end);
+    return (start <= periodEnd && end >= periodStart);
   });
 };
+
 // --- Atomic Booking Creation with Buffer, Payment, Promo, Price, Audit, Channel ---
 const createBooking = async (req, res) => {
   try {
@@ -66,8 +97,9 @@ const createBooking = async (req, res) => {
     }
 
     // Check blackout dates first
-    if (vehicleDoc.blackoutDates && vehicleDoc.blackoutDates.length > 0) {
-      const isAvailable = isDateRangeAvailable(vehicleDoc.blackoutDates, from, to);
+  if (vehicleDoc.blackoutPeriods && vehicleDoc.blackoutPeriods.length > 0) {
+  const isAvailable = isDateRangeAvailable(vehicleDoc.blackoutPeriods, from, to);
+
       if (!isAvailable) {
         return res.status(409).json({ 
           success: false, 
@@ -78,11 +110,14 @@ const createBooking = async (req, res) => {
 
 
     // Existing buffer time and double-booking checks
-    const bufferOk = await checkBufferTime(idVehicle, fromTime, toTime);
-    if (!bufferOk) {
-      return res.status(409).json({ success: false, error: 'Vehicle is not available for the selected time (buffer conflict).' });
+    const bufferResult = await checkBufferTime(idVehicle, fromTime, toTime);
+    if (!bufferResult.allowed) {
+      return res.status(409).json({
+        success: false,
+        error: bufferResult.message,
+      });
     }
-
+    
     // Payment must be pending or paid
     if (!['pending', 'paid'].includes(paymentStatus)) {
       return res.status(400).json({ success: false, error: "Invalid payment status" });
@@ -164,10 +199,19 @@ const cancelBooking = async (req, res) => {
     await booking.save();
     // Mark vehicle as available
     const vehicleDoc = await Vehicle.findById(booking.idVehicle);
-    if (vehicleDoc) {
-      vehicleDoc.status = 'available';
-      await vehicleDoc.save();
-    }
+  if (vehicleDoc && vehicleDoc.blackoutPeriods && Array.isArray(vehicleDoc.blackoutPeriods)) {
+  const bookingStart = new Date(booking.from);
+  const bookingEnd = new Date(booking.to);
+
+  vehicleDoc.blackoutPeriods = vehicleDoc.blackoutPeriods.filter(period => {
+    const periodStart = new Date(period.start);
+    const periodEnd = new Date(period.end);
+    // Keep periods that don't match this booking
+    return !(periodStart.getTime() === bookingStart.getTime() && periodEnd.getTime() === bookingEnd.getTime());
+  });
+
+  await vehicleDoc.save();
+}
 
     // --- NOTIFICATION LOGIC ---
     try {
@@ -283,7 +327,8 @@ const addAdminNote = async (req, res) => {
 const confirmBooking = async (req, res) => {
   try {
     const { bookingId } = req.params;
-
+    console.log(req.params)
+    console.log("bookingID",bookingId)
     // Find and validate the booking
     const booking = await Booking.findById(bookingId);
     if (!booking) {
@@ -292,6 +337,7 @@ const confirmBooking = async (req, res) => {
         error: "Booking not found" 
       });
     }
+    console.log("booking",booking)
 
     // Validate booking is in pending state
     if (booking.status !== 'pending') {
@@ -320,36 +366,32 @@ const confirmBooking = async (req, res) => {
       await booking.save({ session });
 
       // Add booking dates to vehicle's blackout dates
-      const bookingDates = [];
-      let currentDate = new Date(booking.from);
-      const endDate = new Date(booking.to);
+      const blackoutPeriod = {
+        from: booking.from,
+        to: booking.to
+      };
       
-      while (currentDate <= endDate) {
-        bookingDates.push(new Date(currentDate));
-        currentDate.setDate(currentDate.getDate() + 1);
-      }
-
-      // Update vehicle's blackout dates
+      // Update vehicle's blackout periods
       await Vehicle.findByIdAndUpdate(
         booking.idVehicle,
-        { 
-          $addToSet: { blackoutDates: { $each: bookingDates } },
+        {
+          $push: { blackoutPeriods: blackoutPeriod },
           $inc: { trips: 1 }
         },
         { session }
       );
-
-      // If driver is assigned, update driver's blackout dates
+      
+      // If driver is assigned, update driver's blackout periods
       if (booking.driver) {
         await Driver.findByIdAndUpdate(
           booking.driver,
-          { 
-            $addToSet: { blackoutDates: { $each: bookingDates } }
+          {
+            $push: { blackoutPeriods: blackoutPeriod }
           },
           { session }
         );
       }
-
+      
       // --- NOTIFICATION LOGIC ---
       // Notify user and company by email
       try {

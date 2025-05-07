@@ -109,15 +109,17 @@ const driverSchema = new Schema({
     validUntil: Date
   },
   availability: availabilitySchema,
-  blackoutDates: [{ 
-    type: Date,
-    validate: {
-      validator: function(date) {
-        return date.getTime() >= Date.now();
-      },
-      message: 'Blackout dates must be in the future'
-    }
+  blackoutPeriods: [{
+    from: { type: Date, required: true },
+    to: { type: Date, required: true },
+    reason: {
+      type: String,
+      enum: ['buffer', 'maintenance', 'other'],
+      default: 'buffer'
+    },
+    relatedBooking: { type: Schema.Types.ObjectId, ref: 'Booking' }
   }],
+  
   bookings: [{
     type: Schema.Types.ObjectId,
     ref: 'Booking'

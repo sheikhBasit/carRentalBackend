@@ -1,4 +1,3 @@
-// scheduledNotifications.js
 const cron = require('node-cron');
 const mongoose = require('mongoose');
 const Booking = require('./models/booking.model');
@@ -20,8 +19,12 @@ function startScheduledTasks() {
   // Runs every 5 minutes
   const reminderTask = cron.schedule('*/5 * * * *', async () => {
     console.log('Running scheduled notification tasks at:', new Date().toISOString());
+    
+    // Initialize 'now' only once
     const now = new Date();
     const in30min = new Date(now.getTime() + 30 * 60 * 1000);
+    const startOfToday = new Date(now.setHours(0, 0, 0, 0));  // Start of today at 00:00:00
+    const endOfToday = new Date(now.setHours(23, 59, 59, 999)); // End of today at 23:59:59
 
     try {
       // --- Delivery Reminders ---
@@ -141,13 +144,15 @@ function startScheduledTasks() {
       // --- Auto-complete Past Bookings ---
       const pastBookings = await Booking.find({
         status: { $in: ['confirmed', 'ongoing'] },
-        toTime: { $lt: now }
+        fromTime: { $lt: startOfToday }, // Ensure `fromTime` is strictly before today
+        toTime: { $lt: startOfToday }    // Ensure `toTime` is strictly before today
       });
-
+      
       console.log(`Auto-completing ${pastBookings.length} past bookings`);
       
       for (const booking of pastBookings) {
         try {
+          // Only mark as completed if both fromTime and toTime are strictly in the past (before today)
           booking.status = 'completed';
           await booking.save();
           console.log(`Booking ${booking._id} marked as completed.`);
@@ -155,6 +160,7 @@ function startScheduledTasks() {
           console.error(`Error updating booking ${booking._id} status to completed:`, err);
         }
       }
+      
     } catch (error) {
       console.error('Error in scheduled notification task:', error);
     }
