@@ -112,10 +112,12 @@ const verifyEmail = async (req, res) => {
 const login = async (req, res) => {
     try {
         const { email, password } = req.body;
+		const normalizedEmail = email.trim().toLowerCase();
+
         if (!email || !password) {
             return res.status(400).json({ success: false, message: 'Email and password are required.' });
         }
-        const user = await User.findOne({ email });
+        const user = await User.findOne({ email: normalizedEmail });
         if (!user) {
             return res.status(401).json({ success: false, message: 'Invalid credentials' });
         }
