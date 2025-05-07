@@ -9,20 +9,29 @@ const { sendUserPushNotification, sendCompanyPushNotification } = require('../ut
 
 // --- ENFORCE BUFFER TIME, PAYMENT, CANCELLATION, AUDIT LOGIC ---
 const checkBufferTime = async (vehicleId, fromTime, toTime) => {
-  const bookings = await Booking.find({ idVehicle: vehicleId, status: { $in: ['pending', 'confirmed', 'ongoing'] } });
+  const vehicle = await Vehicle.findById(vehicleId);
+  const bufferMinutes = vehicle.bufferMinutes || 120;
+  const bufferMs = bufferMinutes * 60 * 1000;
+  
   const newStart = new Date(fromTime);
   const newEnd = new Date(toTime);
-  for (const b of bookings) {
-    const existingStart = new Date(b.fromTime);
-    const existingEnd = new Date(b.toTime);
-    if (
-      (newStart < existingEnd && newEnd > existingStart) ||
-      Math.abs(newStart - existingEnd) < (b.bufferMinutes || 120) * 60 * 1000
-    ) {
-      return false;
-    }
-  }
-  return true;
+  
+  const conflictingBookings = await Booking.find({
+    idVehicle: vehicleId,
+    status: { $in: ['pending', 'confirmed', 'ongoing'] },
+    $or: [
+      // Direct overlap
+      { fromTime: { $lt: newEnd }, toTime: { $gt: newStart } },
+      // Before existing booking with buffer
+      { fromTime: { $lt: new Date(newEnd.getTime() + bufferMs) }, 
+       fromTime: { $gte: newEnd } },
+      // After existing booking with buffer
+      { toTime: { $gt: new Date(newStart.getTime() - bufferMs) }, 
+       toTime: { $lte: newStart } }
+    ]
+  });
+  
+  return conflictingBookings.length === 0;
 };
 const isDateRangeAvailable = (blackoutDates, startDate, endDate) => {
   const start = new Date(startDate);
