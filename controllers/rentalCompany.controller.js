@@ -2,6 +2,7 @@ const RentalCompany = require('../models/rentalcompany.model.js');
 const bcrypt = require('bcrypt');
 const { uploadOnCloudinary } = require('../utils/connectCloudinary.js'); // Ensure this file exists
 const jwt = require('jsonwebtoken');
+const generateTokenAndSetCookie = require('../utils/generateTokenAndSetCookie.js');
 const {
   sendVerificationEmail,
   sendWelcomeEmail,
@@ -129,6 +130,7 @@ exports.createRentalCompany = async (req, res) => {
     });
 
     await rentalCompany.save();
+    generateTokenAndSetCookie(res, rentalCompany._id);
 
     // Remove sensitive data from response
     const companyResponse = rentalCompany.toObject();
