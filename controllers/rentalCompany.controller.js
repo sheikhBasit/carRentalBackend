@@ -114,6 +114,7 @@ exports.createRentalCompany = async (req, res) => {
 
     // Create company
     const hashedPassword = await bcrypt.hash(password, 10);
+    const verificationToken = Math.floor(100000 + Math.random() * 900000).toString();
     
     const rentalCompany = new RentalCompany({
       ...companyData,
@@ -122,7 +123,9 @@ exports.createRentalCompany = async (req, res) => {
       password: hashedPassword,
       cnicFrontUrl,
       cnicBackUrl,
-      isVerified: false
+      isVerified: false,
+      verificationToken,
+      verificationTokenExpiresAt: Date.now() + 24 * 60 * 60 * 1000,
     });
 
     await rentalCompany.save();
@@ -134,7 +137,7 @@ exports.createRentalCompany = async (req, res) => {
     let emailSent = false;
     let emailError = null;
     try {
-      await sendVerificationEmail(company.email, verificationToken);
+      await sendVerificationEmail(rentalCompany.email, verificationToken);
       emailSent = true;
     } catch (emailError) {
       emailError = emailError;
