@@ -131,9 +131,20 @@ exports.createRentalCompany = async (req, res) => {
     const companyResponse = rentalCompany.toObject();
     delete companyResponse.password;
     delete companyResponse.__v;
+    let emailSent = false;
+    let emailError = null;
+    try {
+      await sendVerificationEmail(company.email, verificationToken);
+      emailSent = true;
+    } catch (emailError) {
+      emailError = emailError;
+      console.error('Email sending error:', emailError);
+    }
 
     res.status(201).json({
       success: true,
+      emailSent,
+      emailError,
       message: "Rental company created successfully",
       company: companyResponse
     });
