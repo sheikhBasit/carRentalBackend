@@ -293,7 +293,10 @@ exports.getRentalCompanyByEmail = async (req, res) => {
     if (!company) {
       return res.status(404).json({ message: 'Rental company not found' });
     }
-
+    if(!company.isVerified){
+      return res.status(400).json({ success: false, message: "Email is not verified" });
+  
+  }
     // Compare hashed password
     const isMatch = await bcrypt.compare(password, company.password);
     if (!isMatch) {
