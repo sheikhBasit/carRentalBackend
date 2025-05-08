@@ -116,18 +116,18 @@ const vehicleSchema = new mongoose.Schema({
     documentUrl: { type: String },
     expiry: { 
       type: Date,
-      required: true 
+      required: false 
     }
   },
   status: {
     type: String,
     enum: ['available', 'booked', 'under_maintenance', 'inactive'],
     default: 'available',
-    required: true
+    required: false
   },
   maintenanceLogs: [{
-    date: { type: Date, required: true },
-    description: { type: String, required: true },
+    date: { type: Date, required: false },
+    description: { type: String, required: false },
     cost: { type: Number, min: 0 }
   }],
   dynamicPricing: {
@@ -163,8 +163,8 @@ const vehicleSchema = new mongoose.Schema({
     }
   },
   blackoutPeriods: [{
-    from: { type: Date, required: true },
-    to: { type: Date, required: true },
+    from: { type: Date, required: false },
+    to: { type: Date, required: false },
     reason: {
       type: String,
       enum: ['buffer', 'maintenance', 'other'],

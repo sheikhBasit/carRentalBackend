@@ -160,8 +160,10 @@ const logout = async (req, res) => {
 const forgotPassword = async (req, res) => {
 	const { email } = req.body;
 	try {
-		const user = await User.findOne({ email });
-
+		const normalizedEmail = email.trim().toLowerCase();
+		
+		const user = await User.findOne({ normalizedEmail });
+		
 		if (!user) {
 			return res.status(400).json({ success: false, message: "User not found" });
 		}

@@ -77,29 +77,33 @@ const isDateRangeAvailable = (blackoutPeriods, startDate, endDate) => {
 // --- Atomic Booking Creation with Buffer, Payment, Promo, Price, Audit, Channel ---
 const createBooking = async (req, res) => {
   try {
+    console.log('[createBooking] Request received:', req.body);
+
     const { user, idVehicle, from, to, fromTime, toTime, intercity, cityName, driver, termsAccepted, paymentStatus, promoCode, bookingChannel, ...bookingData } = req.body;
 
-    // Validate required fields
     if (!user || !idVehicle || !from || !to || !fromTime || !toTime) {
+      console.warn('[createBooking] Missing required fields');
       return res.status(400).json({ success: false, error: "Missing required fields" });
     }
 
-    // Validate user
+    console.log('[createBooking] Validating user:', user);
     const userDoc = await User.findById(user);
     if (!userDoc || userDoc.isBlocked) {
+      console.warn('[createBooking] User not found or blocked:', user);
       return res.status(403).json({ success: false, error: "User not found or blocked" });
     }
 
-    // Validate vehicle
+    console.log('[createBooking] Validating vehicle:', idVehicle);
     const vehicleDoc = await Vehicle.findById(idVehicle);
     if (!vehicleDoc || vehicleDoc.isDeleted) {
+      console.warn('[createBooking] Vehicle not found or deleted:', idVehicle);
       return res.status(404).json({ success: false, error: "Vehicle not found" });
     }
 
-    // Check blackout dates first
-  if (vehicleDoc.blackoutPeriods && vehicleDoc.blackoutPeriods.length > 0) {
-  const isAvailable = isDateRangeAvailable(vehicleDoc.blackoutPeriods, from, to);
-
+    // Blackout check
+    if (vehicleDoc.blackoutPeriods?.length > 0) {
+      const isAvailable = isDateRangeAvailable(vehicleDoc.blackoutPeriods, from, to);
+      console.log('[createBooking] Blackout check result:', isAvailable);
       if (!isAvailable) {
         return res.status(409).json({ 
           success: false, 
@@ -108,45 +112,54 @@ const createBooking = async (req, res) => {
       }
     }
 
-
-    // Existing buffer time and double-booking checks
+    // Buffer time check
+    console.log('[createBooking] Checking buffer time');
     const bufferResult = await checkBufferTime(idVehicle, fromTime, toTime);
+    console.log('[createBooking] Buffer check result:', bufferResult);
     if (!bufferResult.allowed) {
       return res.status(409).json({
         success: false,
         error: bufferResult.message,
       });
     }
-    
-    // Payment must be pending or paid
+
+    // Payment & terms validation
     if (!['pending', 'paid'].includes(paymentStatus)) {
+      console.warn('[createBooking] Invalid payment status:', paymentStatus);
       return res.status(400).json({ success: false, error: "Invalid payment status" });
     }
-
-    // Terms acceptance
     if (!termsAccepted) {
+      console.warn('[createBooking] Terms not accepted');
       return res.status(400).json({ success: false, error: "Terms and conditions must be accepted" });
     }
 
-    // Price calculation (base, discount, tax, total)
+    // Pricing calculations
     let base = vehicleDoc.dynamicPricing?.baseRate || 0;
     let discount = 0;
     let tax = 0;
     let total = base;
-    if (vehicleDoc.discount && vehicleDoc.discount.percent && vehicleDoc.discount.validUntil > new Date()) {
-      discount = (base * vehicleDoc.discount.percent) / 100;
-      total -= discount;
+
+    console.log('[createBooking] Base rate:', base);
+
+    if (vehicleDoc.discount?.percent && vehicleDoc.discount.validUntil > new Date()) {
+      const discountAmount = (base * vehicleDoc.discount.percent) / 100;
+      discount += discountAmount;
+      total -= discountAmount;
+      console.log('[createBooking] Applied vehicle discount:', discountAmount);
     }
-    // Promo code logic (stub, can be expanded)
+
     if (promoCode === 'PAKISTAN10') {
-      discount += base * 0.10;
-      total -= base * 0.10;
+      const promoDiscount = base * 0.10;
+      discount += promoDiscount;
+      total -= promoDiscount;
+      console.log('[createBooking] Applied promo discount:', promoDiscount);
     }
-    // Tax (e.g., 16%)
+
     tax = total * 0.16;
     total += tax;
 
-    // Create booking
+    console.log('[createBooking] Final price:', { base, discount, tax, total });
+
     const booking = new Booking({
       user,
       idVehicle,
@@ -169,15 +182,26 @@ const createBooking = async (req, res) => {
       auditLogs: [{ action: 'created', by: user, details: 'Booking created', at: new Date() }],
       ...bookingData
     });
+
+    console.log('[createBooking] Saving booking');
     await booking.save();
-    // Mark vehicle as booked
+
+    console.log('[createBooking] Marking vehicle as booked');
     vehicleDoc.status = 'booked';
     await vehicleDoc.save();
+
+    console.log('[createBooking] Booking success:', booking._id);
     res.status(201).json({ success: true, booking });
+
   } catch (err) {
+    console.error('[createBooking] Exception caught:', {
+      message: err.message,
+      stack: err.stack,
+    });
     res.status(500).json({ success: false, error: err.message });
   }
 };
+
 
 // --- Cancel Booking with Refund, Reason, Audit ---
 const cancelBooking = async (req, res) => {
