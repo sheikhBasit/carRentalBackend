@@ -69,13 +69,11 @@ const driverSchema = new Schema({
     type: String, 
     required: true, 
     unique: true,
-    match: /^[0-9]{13}$/ // Assuming Pakistan CNIC format as 13 digits
   },
   phNo: { 
     type: String, 
     required: true,
     unique: true,
-    match: /^[0-9]{10,15}$/ // Adjust regex as needed for your country
   },
   age: { 
     type: Number, 

@@ -107,6 +107,7 @@ exports.createVehicle = async (req, res) => {
       rent,
       transmission,
       fuelType,
+      capacity,
       vehicleType,
       features,
       mileage,

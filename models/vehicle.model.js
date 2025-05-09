@@ -89,7 +89,7 @@ const vehicleSchema = new mongoose.Schema({
   transmission: { type: String, enum: ['automatic', 'manual','Auto','Manual'], required: false },
 
   features: {
-    transmission: { type: String, enum: ['automatic', 'manual'], required: false },
+    transmission: { type: String, enum: ['automatic', 'manual','Auto','Manual'], required: false },
     fuelType: { type: String, enum: ['petrol', 'diesel', 'hybrid', 'electric'], required: false },
     seats: { type: Number, min: 2, max: 15, required: false },
     luggage: { type: Number, min: 0, max: 10 },
@@ -97,6 +97,16 @@ const vehicleSchema = new mongoose.Schema({
     bluetooth: { type: Boolean, default: false },
     gps: { type: Boolean, default: false }
   },
+  characteristics: {
+    type: [String],
+    enum: [
+      'AC', 'Heating', 'Bluetooth', 'Navigation', 'Sunroof', 
+      'Backup Camera', 'Keyless Entry', 'Leather Seats', 'Child Seat',
+      'Android Auto', 'Apple CarPlay', 'USB Ports', 'WiFi', 'Premium Sound'
+    ],
+    required: false
+  },
+  
   mileage: { 
     type: Number,
     min: 0 

@@ -175,6 +175,7 @@ exports.createRentalCompany = async (req, res) => {
 // Verify email
 exports.verifyEmail = async (req, res) => {
   const { code } = req.body;
+  console.log(code);
   
   if (!code) {
     return res.status(400).json({ success: false, message: 'Verification code is required' });
@@ -186,11 +187,12 @@ exports.verifyEmail = async (req, res) => {
     verificationToken: code,
     verificationTokenExpiresAt: { $gt: Date.now() }, // Ensure the token is not expired
     });
+    console.log(company);
   
     if (!company) {
     return res.status(400).json({ success: false, message: 'Invalid or expired verification code' });
     }
-  
+    
     // Update company as verified
     company.isVerified = true;
     company.verificationToken = undefined; // Clear the verification token
