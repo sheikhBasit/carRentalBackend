@@ -12,6 +12,40 @@ function minutesDiff(date1, date2) {
 
 let scheduledTasks = [];
 
+// Function to remove booking period from blackout periods
+async function removeFromBlackoutPeriods(booking) {
+  try {
+    const Vehicle = mongoose.model('Vehicle');
+    const Driver = mongoose.model('Driver');
+    
+    // Update vehicle's blackout periods
+    const vehicle = await Vehicle.findById(booking.idVehicle);
+    if (vehicle && vehicle.blackoutPeriods && vehicle.blackoutPeriods.length > 0) {
+      vehicle.blackoutPeriods = vehicle.blackoutPeriods.filter(period => {
+        return !(period.start.getTime() === booking.fromTime.getTime() && 
+                period.end.getTime() === booking.toTime.getTime());
+      });
+      await vehicle.save();
+    }
+    
+    // Update driver's blackout periods if booking has a driver
+    if (booking.idDriver) {
+      const driver = await Driver.findById(booking.idDriver);
+      if (driver && driver.blackoutPeriods && driver.blackoutPeriods.length > 0) {
+        driver.blackoutPeriods = driver.blackoutPeriods.filter(period => {
+          return !(period.start.getTime() === booking.fromTime.getTime() && 
+                  period.end.getTime() === booking.toTime.getTime());
+        });
+        await driver.save();
+      }
+    }
+    
+    console.log(`Removed booking period from blackout periods for booking ${booking._id}`);
+  } catch (err) {
+    console.error(`Error removing blackout periods for booking ${booking._id}:`, err);
+  }
+}
+
 // Function to start all scheduled tasks
 function startScheduledTasks() {
   console.log('Starting scheduled notification tasks...');
@@ -155,7 +189,11 @@ function startScheduledTasks() {
           // Only mark as completed if both fromTime and toTime are strictly in the past (before today)
           booking.status = 'completed';
           await booking.save();
-          console.log(`Booking ${booking._id} marked as completed.`);
+          
+          // Remove the booking period from blackout periods
+          await removeFromBlackoutPeriods(booking);
+          
+          console.log(`Booking ${booking._id} marked as completed and removed from blackout periods.`);
         } catch (err) {
           console.error(`Error updating booking ${booking._id} status to completed:`, err);
         }
