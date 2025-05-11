@@ -161,8 +161,9 @@ const forgotPassword = async (req, res) => {
 	const { email } = req.body;
 	try {
 		const normalizedEmail = email.trim().toLowerCase();
-		
-		const user = await User.findOne({ normalizedEmail });
+		console.log("normalizedEmail", normalizedEmail);	
+		const user = await User.findOne({ email: normalizedEmail });
+		console.log("User", User);	
 		
 		if (!user) {
 			return res.status(400).json({ success: false, message: "User not found" });
