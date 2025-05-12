@@ -131,7 +131,12 @@ exports.createRentalCompany = async (req, res) => {
 
     await rentalCompany.save();
     const token = generateTokenAndSetCookie(res, rentalCompany._id);
-
+    res.cookie('token', token, {
+      httpOnly: true,
+      secure: true, // Only send cookie on HTTPS
+      sameSite: 'none', // Allow cross-site
+      maxAge: 24 * 60 * 60 * 1000
+  });
     // Remove sensitive data from response
     const companyResponse = rentalCompany.toObject();
     delete companyResponse.password;
