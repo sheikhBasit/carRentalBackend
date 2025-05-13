@@ -130,15 +130,7 @@ exports.createVehicle = async (req, res) => {
       });
     }
     
-    if(!req.body.transmission){
-      transmission = req.body.features.transmission
-    }
-    if(!req.body.fuelType){
-      fuelType = req.body.features.fuelType
-    }
-    if(!req.body.capacity){
-      capacity = req.body.features.seats
-    }
+
     // Validate availability
     if (!availability || !availability.days || !availability.startTime || !availability.endTime) {
       return res.status(400).json({ 

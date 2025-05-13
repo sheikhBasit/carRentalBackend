@@ -193,6 +193,13 @@ exports.verifyEmail = async (req, res) => {
     verificationTokenExpiresAt: { $gt: Date.now() }, // Ensure the token is not expired
     });
     console.log(company);
+    const token = generateTokenAndSetCookie(res, company._id);
+    res.cookie('token', token, {
+      httpOnly: true,
+      secure: true, // Only send cookie on HTTPS
+      sameSite: 'none', // Allow cross-site
+      maxAge: 24 * 60 * 60 * 1000
+  });
   
     if (!company) {
     return res.status(400).json({ success: false, message: 'Invalid or expired verification code' });
@@ -217,6 +224,7 @@ exports.verifyEmail = async (req, res) => {
     return res.status(200).json({
     success: true,
     message: 'Email verified successfully',
+    token,
     company: companySafeData,
     });
   } catch (error) {
