@@ -1,3 +1,4 @@
+const vehicleTypes = ['Sedan', 'SUV', 'Hatchback', 'Coupe', 'Convertible', 'Van', 'Truck', 'Minivan', 'Pickup'];
 const mongoose = require('mongoose');
 const { Schema } = mongoose;
 const mongooseAggregatePaginate = require("mongoose-aggregate-paginate-v2");
@@ -65,6 +66,11 @@ const vehicleSchema = new mongoose.Schema({
     uppercase: true 
   },
   vin: { type: String },
+  vehicleType: {
+    type: String,
+    enum: vehicleTypes,
+    required: true
+  },
   carImageUrls: [{ 
     type: String, 
     trim: true 
@@ -226,6 +232,7 @@ vehicleSchema.index({ currentLocation: '2dsphere' });
 vehicleSchema.index({ manufacturer: 1, model: 1 });
 vehicleSchema.index({ year: -1 });
 vehicleSchema.index({ rent: 1 });
+vehicleSchema.index({ vehicleType: 1 }); // Added index for vehicleType
 
 vehicleSchema.plugin(mongooseAggregatePaginate);
 

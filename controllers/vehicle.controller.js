@@ -110,6 +110,7 @@ exports.  createVehicle = async (req, res) => {
       capacity,
       vehicleType,
       features,
+      characteristics,
       mileage,
       lastServiceDate,
       availability,
@@ -191,6 +192,7 @@ exports.  createVehicle = async (req, res) => {
       year,
       carImageUrls,
       rent,
+      characteristics,
       transmission,
       capacity,
       fuelType,
@@ -762,7 +764,7 @@ exports.updateVehicle = async (req, res) => {
       maximumRentalDays,
       removeImages
     } = req.body;
-
+    console.log(req.body);
     // Validate vehicle ID
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({
@@ -1013,6 +1015,7 @@ exports.searchVehicles = async (req, res) => {
 exports.deleteVehicle = async (req, res) => {
   try {
     const { id } = req.params;
+    console.log("Delete this ",id);
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({
         success: false,

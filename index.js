@@ -1,12 +1,12 @@
 require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
-const cors = require('cors');
 const cookieParser = require('cookie-parser');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const { startScheduledTasks, stopScheduledTasks } = require('./scheduledNotifications');
+
 const app = express();
 
 // ====================== CORS Configuration ======================
@@ -22,10 +22,40 @@ const allowedOrigins = [
   /\.ngrok\.io$/,
   'https://car-rental-frontend.vercel.app',
   'https://car-rental-backend-black.vercel.app',
-  'http://127.0.0.1:42229', 
-  'http://127.0.0.1:5174',  
-  '*'  
+  'http://127.0.0.1:42229',
+  'http://127.0.0.1:5174'
 ];
+
+// Enhanced CORS middleware - must come FIRST before any other middleware
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  
+  // Check if origin is allowed
+  const isAllowed = allowedOrigins.some(allowedOrigin => {
+    if (typeof allowedOrigin === 'string') {
+      return allowedOrigin === origin;
+    } else if (allowedOrigin instanceof RegExp) {
+      return allowedOrigin.test(origin);
+    }
+    return false;
+  });
+
+  if (isAllowed) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Access-Control-Expose-Headers', 'Content-Type, Authorization');
+    res.setHeader('Vary', 'Origin');
+  }
+
+  // Handle preflight requests
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
+  next();
+});
 
 // Configure multer storage
 const storage = multer.diskStorage({
@@ -53,26 +83,6 @@ const upload = multer({
       cb(new Error('Only image files are allowed!'), false);
     }
   }
-});
-
-// Enhanced CORS middleware - must come FIRST before any other middleware
-app.use((req, res, next) => {
-  const origin = req.headers.origin;
-  
-  // Allow any origin for development
-  res.setHeader('Access-Control-Allow-Origin', origin || '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, X-Forwarded-For');
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
-  res.setHeader('Access-Control-Expose-Headers', 'Content-Type, Authorization');
-  res.setHeader('Vary', 'Origin'); // Important for caching
-  
-  // Handle preflight requests
-  if (req.method === 'OPTIONS') {
-    return res.status(204).end();
-  }
-  
-  next();
 });
 
 // Regular middleware
@@ -116,6 +126,28 @@ const notificationRoutes = require('./routes/notification.route');
 const feedbackRoutes = require('./routes/feedback.route');
 const googleRoute = require('./routes/google.route');
 
+// Explicit OPTIONS handler for all routes
+app.options('*', (req, res) => {
+  const origin = req.headers.origin;
+  const isAllowed = allowedOrigins.some(allowedOrigin => {
+    if (typeof allowedOrigin === 'string') {
+      return allowedOrigin === origin;
+    } else if (allowedOrigin instanceof RegExp) {
+      return allowedOrigin.test(origin);
+    }
+    return false;
+  });
+
+  if (isAllowed) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+  }
+  res.status(200).end();
+});
+
+// Route definitions
 app.use('/api/users', userRoutes);
 app.use('/api/bookings', bookingRoutes);
 app.use('/api/drivers', driverRoutes);
@@ -150,6 +182,11 @@ app.get('/test-cors', (req, res) => {
   });
 });
 
+// Test DELETE endpoint
+app.delete('/api/test-delete', (req, res) => {
+  res.json({ message: "DELETE test successful" });
+});
+
 // ====================== Error Handling ======================
 // Not found handler
 app.use((req, res, next) => {
@@ -161,9 +198,18 @@ app.use((req, res, next) => {
 
 // Error handler
 app.use((err, req, res, next) => {
-  // Always set CORS headers on errors
+  // Set CORS headers on errors
   const origin = req.headers.origin;
-  if (allowedOrigins.some(o => typeof o === 'string' ? o === origin : o.test(origin))) {
+  const isAllowed = allowedOrigins.some(allowedOrigin => {
+    if (typeof allowedOrigin === 'string') {
+      return allowedOrigin === origin;
+    } else if (allowedOrigin instanceof RegExp) {
+      return allowedOrigin.test(origin);
+    }
+    return false;
+  });
+
+  if (isAllowed) {
     res.setHeader('Access-Control-Allow-Origin', origin);
     res.setHeader('Access-Control-Allow-Credentials', 'true');
   }
@@ -214,7 +260,6 @@ app.use((err, req, res, next) => {
 });
 
 // ====================== Server Setup ======================
-
 const PORT = process.env.PORT || 5000;
 let scheduledTasksRunning = [];
 
@@ -281,166 +326,4 @@ process.on('SIGINT', async () => {
   });
 });
 
-// Protected admin endpoints for cron job control
-app.get('/api/admin/cron/status', (req, res) => {
-  // Add any authentication/authorization checks here if needed
-  res.json({
-    cronJobsRunning: scheduledTasksRunning.length > 0,
-    jobCount: scheduledTasksRunning.length,
-    environment: process.env.NODE_ENV,
-    enabled: process.env.ENABLE_SCHEDULED_TASKS === 'true'
-  });
-});
-
-app.post('/api/admin/cron/start', (req, res) => {
-  // Add any authentication/authorization checks here if needed
-  if (scheduledTasksRunning.length === 0) {
-    scheduledTasksRunning = startScheduledTasks();
-    res.json({ success: true, message: 'Scheduled tasks started' });
-  } else {
-    res.json({ success: false, message: 'Scheduled tasks already running' });
-  }
-});
-
-app.post('/api/admin/cron/stop', (req, res) => {
-  // Add any authentication/authorization checks here if needed
-  stopScheduledTasks();
-  scheduledTasksRunning = [];
-  res.json({ success: true, message: 'Scheduled tasks stopped' });
-});
-
 module.exports = app;
-
-
-// // Graceful shutdown
-// process.on('SIGTERM', () => {
-//   console.log('SIGTERM received. Shutting down gracefully');
-//   server.close(() => {
-//     console.log('Server closed');
-//     mongoose.connection.close(false, () => {
-//       console.log('MongoDB connection closed');
-//       process.exit(0);
-//     });
-//   });
-// });
-
-// process.on('SIGINT', () => {
-//   console.log('SIGINT received. Shutting down gracefully');
-//   server.close(() => {
-//     console.log('Server closed');
-//     mongoose.connection.close(false, () => {
-//       console.log('MongoDB connection closed');
-//       process.exit(0);
-//     });
-//   });
-// });
-
-// process.on('SIGTERM', async () => {
-//   console.log('SIGTERM received. Shutting down gracefully');
-//   server.close(async () => {
-//     console.log('Server closed');
-//     try {
-//       await mongoose.connection.close(false);
-//       console.log('MongoDB connection closed');
-//       process.exit(0);
-//     } catch (error) {
-//       console.error('Error closing MongoDB connection:', error);
-//       process.exit(1);
-//     }
-//   });
-// });
-
-// process.on('SIGINT', async () => {
-//   console.log('SIGINT received. Shutting down gracefully');
-//   server.close(async () => {
-//     console.log('Server closed');
-//     try {
-//       await mongoose.connection.close(false);
-//       console.log('MongoDB connection closed');
-//       process.exit(0);
-//     } catch (error) {
-//       console.error('Error closing MongoDB connection:', error);
-//       process.exit(1);
-//     }
-//   });
-// });
-// const PORT = process.env.PORT || 5000;
-// let scheduledTasksRunning = [];
-
-// const server = app.listen(PORT, () => {
-//   console.log(`Server running on port ${PORT}`);
-  
-//   // Start cron jobs only after the server is successfully listening
-//   if (mongoose.connection.readyState === 1) {
-//     scheduledTasksRunning = startScheduledTasks();
-//     console.log('Scheduled tasks started successfully');
-//   } else {
-//     console.log('Database not connected. Scheduled tasks will start after database connection');
-//     mongoose.connection.once('connected', () => {
-//       scheduledTasksRunning = startScheduledTasks();
-//       console.log('Scheduled tasks started after database connection');
-//     });
-//   }
-// });
-
-// // Update your graceful shutdown handlers to stop cron jobs before closing
-// process.on('SIGTERM', async () => {
-//   console.log('SIGTERM received. Shutting down gracefully');
-//   // Stop all scheduled tasks first
-//   stopScheduledTasks();
-  
-//   server.close(async () => {
-//     console.log('Server closed');
-//     try {
-//       await mongoose.connection.close(false);
-//       console.log('MongoDB connection closed');
-//       process.exit(0);
-//     } catch (error) {
-//       console.error('Error closing MongoDB connection:', error);
-//       process.exit(1);
-//     }
-//   });
-// });
-
-// process.on('SIGINT', async () => {
-//   console.log('SIGINT received. Shutting down gracefully');
-//   // Stop all scheduled tasks first
-//   stopScheduledTasks();
-  
-//   server.close(async () => {
-//     console.log('Server closed');
-//     try {
-//       await mongoose.connection.close(false);
-//       console.log('MongoDB connection closed');
-//       process.exit(0);
-//     } catch (error) {
-//       console.error('Error closing MongoDB connection:', error);
-//       process.exit(1);
-//     }
-//   });
-// });
-
-// // If you need to manually control the cron jobs for testing or maintenance
-// app.get('/api/admin/cron/status', (req, res) => {
-//   res.json({
-//     cronJobsRunning: scheduledTasksRunning.length > 0,
-//     jobCount: scheduledTasksRunning.length
-//   });
-// });
-
-// app.post('/api/admin/cron/start', (req, res) => {
-//   if (scheduledTasksRunning.length === 0) {
-//     scheduledTasksRunning = startScheduledTasks();
-//     res.json({ success: true, message: 'Scheduled tasks started' });
-//   } else {
-//     res.json({ success: false, message: 'Scheduled tasks already running' });
-//   }
-// });
-
-// app.post('/api/admin/cron/stop', (req, res) => {
-//   stopScheduledTasks();
-//   scheduledTasksRunning = [];
-//   res.json({ success: true, message: 'Scheduled tasks stopped' });
-// });
-
-// module.exports = app;
