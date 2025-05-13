@@ -126,7 +126,7 @@ const notificationRoutes = require('./routes/notification.route');
 const feedbackRoutes = require('./routes/feedback.route');
 const googleRoute = require('./routes/google.route');
 
-// Explicit OPTIONS handler for all routes
+// Explicit OPTIONS handler for all routes cors
 app.options('*', (req, res) => {
   const origin = req.headers.origin;
   const isAllowed = allowedOrigins.some(allowedOrigin => {
