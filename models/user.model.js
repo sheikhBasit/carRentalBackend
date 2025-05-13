@@ -13,21 +13,21 @@ const paymentMethodSchema = new mongoose.Schema({
 const userSchema = new mongoose.Schema({
   name: { type: String, required: true },
   email: { type: String, required: true, unique: true },
-  password: { type: String, required: true },
-  phoneNo: { type: String, required: true },
-  address: { type: String, required: true },
+  password: { type: String, required: false },
+  phoneNo: { type: String, required: false },
+  address: { type: String, required: false },
   profilePic: { type: String, required: false },
   accountNo: { type: String, required: false, unique: true },
-  city: { type: String, required: true },
+  city: { type: String, required: false },
   fcmToken: { type: String, required: false },
-  province: { type: String, required: true },
+  province: { type: String, required: false },
   license: { type: String, required: false },
   licenseFrontUrl: { type: String, required: false },
   licenseBackUrl: { type: String, required: false },
-  cnic: { type: String, required: true, unique: true },
+  cnic: { type: String, required: false, unique: true },
   cnicFrontUrl: { type: String, required: false },
   cnicBackUrl: { type: String, required: false },
-  age: { type: Number, required: true, min: 18 }, // Age requirement for Pakistani drivers
+  age: { type: Number, required: false, min: 18 }, // Age requirement for Pakistani drivers
   otp: { type: String, required: false }, // For phone verification
   otpVerified: { type: Boolean, default: false },
   licenseVerified: { type: Boolean, default: false },
