@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const vehicleController = require('../controllers/vehicle.controller.js');
 const upload = require('../midllewares/fileUpload.middleware.js');
+const multer = require('multer');
 
 // --- CORS Preflight Handling for All Routes ---
 router.options('*', (req, res) => {
@@ -11,6 +12,29 @@ router.options('*', (req, res) => {
   res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.status(200).end();
 });
+
+// --- Middleware for PUT requests with FormData ---
+const putFormDataHandler = (req, res, next) => {
+  if (req.headers['content-type'] && req.headers['content-type'].includes('multipart/form-data')) {
+    // Use multer to handle the FormData
+    upload.array('carImageUrls', 3)(req, res, (err) => {
+      if (err) {
+        if (err.code === 'LIMIT_UNEXPECTED_FILE') {
+          // If no files were uploaded, that's okay for PUT requests
+          return next();
+        }
+        return res.status(400).json({ 
+          success: false, 
+          error: err.message 
+        });
+      }
+      next();
+    });
+  } else {
+    // Handle regular JSON data
+    express.json()(req, res, next);
+  }
+};
 
 // --- Vehicle CRUD Endpoints ---
 
@@ -34,7 +58,10 @@ router.get('/', vehicleController.getVehicles);
 // Individual vehicle operations
 router.route('/:id')
   .get(vehicleController.getVehicleById)
-  .put(vehicleController.updateVehicle)
+  .put(
+    putFormDataHandler, // Handle both FormData and JSON
+    vehicleController.updateVehicle
+  )
   .delete(vehicleController.deleteVehicle);
 
 // Specialized endpoints
