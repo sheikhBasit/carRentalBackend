@@ -90,7 +90,6 @@ exports.createDriver = async (req, res) => {
         error: "Invalid phone number format. Please use format: +923XX-XXXXXXX or 03XX-XXXXXXX"
       });
     }
-
     // Profile image validation
     if (!req.files?.profileimg || req.files.profileimg.length === 0) {
       return res.status(400).json({ 
@@ -152,7 +151,6 @@ exports.createDriver = async (req, res) => {
       age: parseInt(age),
       experience: parseInt(experience),
       profileimg: profileImageUrl,
-      baseHourlyRate: parseFloat(baseHourlyRate),
       baseDailyRate: parseFloat(baseDailyRate),
       availability,
       blackoutDates,
