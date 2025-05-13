@@ -96,7 +96,7 @@ exports.deleteAllVehicles = async (req, res) => {
 //   }
 // };
 
-exports.createVehicle = async (req, res) => {
+exports.  createVehicle = async (req, res) => {
   try {
     const {
       numberPlate,

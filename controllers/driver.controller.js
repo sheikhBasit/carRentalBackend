@@ -525,21 +525,13 @@ exports.updateDriver = async (req, res) => {
       baseHourlyRate,
       baseDailyRate,
       currentPromotion,
-      blackoutDates
+      blackoutDates,
+      
     } = req.body;
 
     console.log(req.body);
 
-    // Parse availability from string if provided
-    let parsedAvailability;
-    if (req.body.availability) {
-      try {
-        parsedAvailability = JSON.parse(req.body.availability);
-      } catch (err) {
-        return res.status(400).json({ error: 'Invalid availability format' });
-      }
-    }
-
+    
   
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({
@@ -613,7 +605,7 @@ exports.updateDriver = async (req, res) => {
       ...(baseHourlyRate && { baseHourlyRate }),
       ...(baseDailyRate && { baseDailyRate }),
       ...(currentPromotion && { currentPromotion }),
-      ...(parsedAvailability && { availability: parsedAvailability }),
+      ...(req.body.availability && { availability: req.body.availability }),
       ...(blackoutDates && { blackoutDates }),
       profileimg: profileImageUrl
     };
