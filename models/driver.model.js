@@ -90,7 +90,7 @@ const driverSchema = new Schema({
   baseHourlyRate: {
     type: Number,
     min: 0,
-    required: true
+    required: false
   },
   baseDailyRate: {
     type: Number,
