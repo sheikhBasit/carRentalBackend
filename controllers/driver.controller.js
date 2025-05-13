@@ -73,7 +73,7 @@ exports.createDriver = async (req, res) => {
 
     // Validate required fields
     if (!name || !company || !license || !cnic || !phNo || !age || 
-        !experience || !baseHourlyRate || !baseDailyRate) {
+        !experience || !baseDailyRate) {
       return res.status(400).json({ 
         success: false,
         message: "Missing required fields" 
