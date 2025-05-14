@@ -4,8 +4,9 @@ const Booking = require('../models/booking.model');
 // Create feedback after booking completion
 exports.createFeedback = async (req, res) => {
   try {
-    const { booking, rating, comment } = req.body;
-    const user = req.user._id;
+    const { booking, rating, comment, user } = req.body;
+    console.log(req.body)
+    console.log(user)
     const bookingDoc = await Booking.findById(booking);
     if (!bookingDoc || bookingDoc.status !== 'completed') {
       return res.status(400).json({ success: false, error: 'Feedback allowed only after completed booking.' });
@@ -18,6 +19,7 @@ exports.createFeedback = async (req, res) => {
       rating,
       comment
     });
+    console.log(feedback)
     await feedback.save();
     return res.status(201).json({ success: true, feedback });
   } catch (err) {

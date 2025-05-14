@@ -69,7 +69,7 @@ const vehicleSchema = new mongoose.Schema({
   vehicleType: {
     type: String,
     enum: vehicleTypes,
-    required: true
+    required: false
   },
   carImageUrls: [{ 
     type: String, 

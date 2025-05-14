@@ -1,10 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const feedbackController = require('../controllers/feedback.controller');
-const { verifyToken } = require('../midllewares/verifyToken');
 
 // Create feedback (requires authentication)
-router.post('/', verifyToken, feedbackController.createFeedback);
+router.post('/',  feedbackController.createFeedback);
 
 // Get all feedback for a booking
 router.get('/booking/:bookingId', feedbackController.getFeedbackForBooking);

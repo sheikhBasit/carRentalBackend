@@ -741,6 +741,27 @@ const getBookingById = async (req, res) => {
         }
       },
       { $unwind: { path: '$driver', preserveNullAndEmptyArrays: true } },
+      {
+        $lookup: {
+          from: "rentalcompanies",
+          localField: "company",
+          foreignField: "_id",
+          as: "company",
+          pipeline: [
+            {
+              $project: {
+                companyName: 1,
+                gmail: 1,
+              },
+            },
+          ],
+        },
+      },{
+        $unwind: {
+          path: "$company",
+          preserveNullAndEmptyArrays: true, 
+        },
+      },
     ]);
 
     if (!result || result.length === 0) {
