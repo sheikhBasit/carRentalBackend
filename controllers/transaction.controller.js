@@ -276,14 +276,14 @@ exports.getTransactionDetails = async (req, res) => {
                       manufacturer: 1,
                       model: 1,
                       numberPlate: 1,
-                      carImageUrls: 1,
+                      carImageUrls: { $arrayElemAt: ["$carImageUrls", 0] }, // Get first image
                       transmission: 1,
                       capacity: 1,
                       rent: 1,
                       features: 1,
                       fuelType: 1,
                       year: 1,
-                      companyId: 1
+                      company: "$companyId" // Changed from companyId to match frontend
                     }
                   }
                 ]
@@ -331,7 +331,7 @@ exports.getTransactionDetails = async (req, res) => {
             {
               $lookup: {
                 from: "rentalcompanies",
-                localField: "vehicle.companyId",
+                localField: "vehicle.company",
                 foreignField: "_id",
                 as: "company",
                 pipeline: [
@@ -349,36 +349,33 @@ exports.getTransactionDetails = async (req, res) => {
               }
             },
             {
-              $unwind: {
-                path: "$vehicle",
-                preserveNullAndEmptyArrays: true
-              }
-            },
-            {
-              $unwind: {
-                path: "$user",
-                preserveNullAndEmptyArrays: true
-              }
-            },
-            {
-              $unwind: {
-                path: "$driver",
-                preserveNullAndEmptyArrays: true
-              }
-            },
-            {
-              $unwind: {
-                path: "$company",
-                preserveNullAndEmptyArrays: true
+              $project: {
+                from: 1,
+                to: 1,
+                fromTime: 1,
+                toTime: 1,
+                vehicle: { $arrayElemAt: ["$vehicle", 0] },
+                user: { $arrayElemAt: ["$user", 0] },
+                driver: { $arrayElemAt: ["$driver", 0] },
+                company: { $arrayElemAt: ["$company", 0] }
               }
             }
           ]
         }
       },
       {
-        $unwind: {
-          path: "$booking",
-          preserveNullAndEmptyArrays: true
+        $addFields: {
+          booking: { $arrayElemAt: ["$booking", 0] }
+        }
+      },
+      {
+        $project: {
+          transactionId: 1,
+          amount: 1,
+          paymentStatus: 1,
+          createdAt: 1,
+          bookingId: 1,
+          booking: 1
         }
       }
     ]);
@@ -390,9 +387,15 @@ exports.getTransactionDetails = async (req, res) => {
       });
     }
 
+    // Format the response to match frontend expectations
+    const formattedTransaction = {
+      ...transaction[0],
+      booking: transaction[0].booking || null
+    };
+
     return res.status(200).json({
       success: true,
-      data: transaction[0]
+      data: formattedTransaction
     });
   } catch (error) {
     console.error("Error fetching transaction details:", error);

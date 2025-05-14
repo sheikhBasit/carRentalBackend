@@ -54,11 +54,16 @@ function startScheduledTasks() {
   const reminderTask = cron.schedule('*/5 * * * *', async () => {
     console.log('Running scheduled notification tasks at:', new Date().toISOString());
     
-    // Initialize 'now' only once
+    // Initialize dates correctly
     const now = new Date();
     const in30min = new Date(now.getTime() + 30 * 60 * 1000);
-    const startOfToday = new Date(now.setHours(0, 0, 0, 0));  // Start of today at 00:00:00
-    const endOfToday = new Date(now.setHours(23, 59, 59, 999)); // End of today at 23:59:59
+    
+    // Create fresh Date objects for start/end of day
+    const startOfToday = new Date(now);
+    startOfToday.setHours(0, 0, 0, 0);
+    
+    const endOfToday = new Date(now);
+    endOfToday.setHours(23, 59, 59, 999);
 
     try {
       // --- Delivery Reminders ---
@@ -178,19 +183,17 @@ function startScheduledTasks() {
       // --- Auto-complete Past Bookings ---
       const pastBookings = await Booking.find({
         status: { $in: ['confirmed', 'ongoing'] },
-        fromTime: { $lt: startOfToday }, // Ensure `fromTime` is strictly before today
-        toTime: { $lt: startOfToday }    // Ensure `toTime` is strictly before today
+        fromTime: { $lt: startOfToday }, // Bookings that started before today
+        toTime: { $lt: now }             // And ended before current time
       });
       
       console.log(`Auto-completing ${pastBookings.length} past bookings`);
       
       for (const booking of pastBookings) {
         try {
-          // Only mark as completed if both fromTime and toTime are strictly in the past (before today)
           booking.status = 'completed';
           await booking.save();
           
-          // Remove the booking period from blackout periods
           await removeFromBlackoutPeriods(booking);
           
           console.log(`Booking ${booking._id} marked as completed and removed from blackout periods.`);
@@ -203,7 +206,8 @@ function startScheduledTasks() {
       console.error('Error in scheduled notification task:', error);
     }
   }, {
-    scheduled: false // Don't start immediately
+    scheduled: false,
+    timezone: "Asia/Karachi" // Set your appropriate timezone
   });
 
   // Store the task for potential stopping later
@@ -214,7 +218,6 @@ function startScheduledTasks() {
   
   return scheduledTasks;
 }
-
 // Function to stop all scheduled tasks
 function stopScheduledTasks() {
   console.log('Stopping all scheduled tasks...');
