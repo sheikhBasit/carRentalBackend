@@ -86,44 +86,69 @@ const {
     }
   };
   
-  // 5. Send booking confirmation email
-  const sendBookingConfirmationEmail = async (email, name, bookingDetails, isCompany = false) => {
-    try {
-      const subject = isCompany ? "New Booking Confirmed" : "Your Booking is Confirmed!";
-      const html = `
-        <h2>${isCompany ? 'A new booking has been confirmed for your vehicle!' : 'Thank you for booking with us!'}</h2>
-        <p>Hello ${name || ''},</p>
-        <p>${isCompany ? 'Booking details:' : 'Your booking is now confirmed. Here are your details:'}</p>
-        <ul>
-          <li><strong>Booking ID:</strong> ${bookingDetails._id}</li>
-          <li><strong>Vehicle:</strong> ${bookingDetails.vehicleName || ''}</li>
-          <li><strong>From:</strong> ${bookingDetails.from}</li>
-          <li><strong>To:</strong> ${bookingDetails.to}</li>
-        </ul>
-        <p>${isCompany ? 'Please prepare the vehicle for the customer.' : 'We look forward to serving you!'}</p>
-        <p>Best regards,<br/>Drive Fleet Team</p>
-      `;
   
-      const mailOptions = {
-        from: `Drive Fleet <${process.env.GMAIL_USER}>`,
-        to: email,
-        subject,
-        html
-      };
-  
-      const info = await transporter.sendMail(mailOptions);
-      console.log("Booking confirmation email sent", info.messageId);
-      return info;
-    } catch (error) {
-      console.error("Error sending booking confirmation email", error);
-      throw new Error(`Error sending booking confirmation email: ${error.message}`);
-    }
-  };
+
+  // Enhanced booking confirmation email function that can handle reminders
+const sendBookingConfirmationEmail = async (
+  email,
+  name,
+  bookingDetails,
+  isCompany = false,
+  customSubject = null,
+  customMessage = null
+) => {
+  try {
+    const subject = customSubject || 
+                   (isCompany ? "New Booking Confirmed" : "Your Booking is Confirmed!");
+    
+    const html = customMessage ? `
+      <h2>${customSubject}</h2>
+      <p>Hello ${name || ''},</p>
+      <p>${customMessage}</p>
+      <p>Booking details:</p>
+      <ul>
+        <li><strong>Booking ID:</strong> ${bookingDetails._id}</li>
+        ${bookingDetails.vehicleName ? `<li><strong>Vehicle:</strong> ${bookingDetails.vehicleName}</li>` : ''}
+        ${bookingDetails.from ? `<li><strong>From:</strong> ${bookingDetails.from}</li>` : ''}
+        ${bookingDetails.to ? `<li><strong>To:</strong> ${bookingDetails.to}</li>` : ''}
+        ${bookingDetails.customerName ? `<li><strong>Customer:</strong> ${bookingDetails.customerName}</li>` : ''}
+      </ul>
+      <p>Best regards,<br/>Drive Fleet Team</p>
+    ` : `
+      <h2>${isCompany ? 'A new booking has been confirmed for your vehicle!' : 'Thank you for booking with us!'}</h2>
+      <p>Hello ${name || ''},</p>
+      <p>${isCompany ? 'Booking details:' : 'Your booking is now confirmed. Here are your details:'}</p>
+      <ul>
+        <li><strong>Booking ID:</strong> ${bookingDetails._id}</li>
+        <li><strong>Vehicle:</strong> ${bookingDetails.vehicleName || ''}</li>
+        <li><strong>From:</strong> ${bookingDetails.from}</li>
+        <li><strong>To:</strong> ${bookingDetails.to}</li>
+      </ul>
+      <p>${isCompany ? 'Please prepare the vehicle for the customer.' : 'We look forward to serving you!'}</p>
+      <p>Best regards,<br/>Drive Fleet Team</p>
+    `;
+
+    const mailOptions = {
+      from: `Drive Fleet <${process.env.GMAIL_USER}>`,
+      to: email,
+      subject,
+      html
+    };
+
+    const info = await transporter.sendMail(mailOptions);
+    console.log("Email sent successfully", info.messageId);
+    return info;
+  } catch (error) {
+    console.error("Error sending email", error);
+    throw new Error(`Error sending email: ${error.message}`);
+  }
+};
+
   
   module.exports = {
     sendVerificationEmail,
+    sendBookingConfirmationEmail,
     sendWelcomeEmail,
     sendPasswordResetEmail,
     sendResetSuccessEmail,
-    sendBookingConfirmationEmail
   };
