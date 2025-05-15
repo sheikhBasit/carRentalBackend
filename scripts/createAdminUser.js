@@ -13,6 +13,7 @@ async function createAdminUser() {
       confirmPassword: 'admin123',
       role: 'admin',
       isBlocked: false,
+      isVerified: true,
       phoneNo: '03123456789',
       address: 'Admin HQ',
       city: 'Lahore',
