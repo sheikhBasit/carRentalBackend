@@ -315,7 +315,7 @@ exports.getRentalCompanyByEmail = async (req, res) => {
     // Compare hashed password
     const isMatch = await bcrypt.compare(password, company.password);
     if (!isMatch) {
-      return res.status(401).json({ message: 'Invalid credentials' });
+      return res.status(401).json({ message: 'Invalid password' });
     }
    // Generate JWT
         const token = jwt.sign({ id: company._id, role: "company" }, process.env.JWT_SECRET, { expiresIn: '1d' });
