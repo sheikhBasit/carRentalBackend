@@ -748,6 +748,8 @@ exports.updateVehicle = async (req, res) => {
       numberPlate,
       manufacturer,
       model,
+      capacity,
+      characteristics,
       year,
       rent,
       transmission,
