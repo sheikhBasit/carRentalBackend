@@ -11,6 +11,20 @@ function minutesDiff(date1, date2) {
   return Math.floor((date2.getTime() - date1.getTime()) / (60 * 1000));
 }
 
+// Helper to compare dates (ignoring time)
+function isSameDate(date1, date2) {
+  return date1.getFullYear() === date2.getFullYear() &&
+         date1.getMonth() === date2.getMonth() &&
+         date1.getDate() === date2.getDate();
+}
+
+// Helper to check if date1 is before date2 (ignoring time)
+function isBeforeDate(date1, date2) {
+  const d1 = new Date(date1.getFullYear(), date1.getMonth(), date1.getDate());
+  const d2 = new Date(date2.getFullYear(), date2.getMonth(), date2.getDate());
+  return d1 < d2;
+}
+
 let scheduledTasks = [];
 
 // Function to remove booking period from blackout periods
@@ -18,7 +32,7 @@ async function removeFromBlackoutPeriods(booking) {
   try {
     const Vehicle = mongoose.model('Vehicle');
     const Driver = mongoose.model('Driver');
-    
+
     // Update vehicle's blackout periods
     const vehicle = await Vehicle.findById(booking.idVehicle);
     if (vehicle && vehicle.blackoutPeriods && vehicle.blackoutPeriods.length > 0) {
@@ -33,7 +47,7 @@ async function removeFromBlackoutPeriods(booking) {
       });
       await vehicle.save();
     }
-    
+
     // Update driver's blackout periods if booking has a driver
     if (booking.idDriver) {
       const driver = await Driver.findById(booking.idDriver);
@@ -49,7 +63,7 @@ async function removeFromBlackoutPeriods(booking) {
         await driver.save();
       }
     }
-    
+
     console.log(`Removed booking period from blackout periods for booking ${booking._id}`);
   } catch (err) {
     console.error(`Error removing blackout periods for booking ${booking._id}:`, err);
@@ -59,14 +73,14 @@ async function removeFromBlackoutPeriods(booking) {
 // Function to start all scheduled tasks
 function startScheduledTasks() {
   console.log('Starting scheduled notification tasks...');
-  
+
   // Runs every 5 minutes
   const reminderTask = cron.schedule('*/5 * * * *', async () => {
     console.log('Running scheduled notification tasks at:', new Date().toISOString());
-    
+
     const now = new Date();
     const in30min = new Date(now.getTime() + 30 * 60 * 1000);
-    
+
     try {
       // --- Delivery Reminders ---
       const deliveryBookings = await Booking.find({
@@ -284,26 +298,31 @@ function startScheduledTasks() {
       }
 
       // --- Complete Finished Bookings ---
-      const completedBookings = await Booking.find({
-        status: { $in: ['confirmed', 'ongoing'] },
-        toTime: { $lt: now }
+      // Get all bookings that should be completed (based on date only)
+      const bookingsToCheck = await Booking.find({
+        status: { $in: ['confirmed', 'ongoing'] }
       });
 
-      console.log(`Processing ${completedBookings.length} bookings for completion`);
+      console.log(`Checking ${bookingsToCheck.length} bookings for completion`);
       
-      for (const booking of completedBookings) {
+      const completedBookings = [];
+      
+      for (const booking of bookingsToCheck) {
         try {
-          // Add additional check to ensure booking should be completed
-          if (booking.toTime < now) {
+          // Compare dates only (ignoring time)
+          if (isBeforeDate(booking.toTime, now)) {
             booking.status = 'completed';
             await booking.save();
             await removeFromBlackoutPeriods(booking);
+            completedBookings.push(booking._id);
             console.log(`Booking ${booking._id} marked as completed.`);
           }
         } catch (err) {
           console.error(`Error completing booking ${booking._id}:`, err);
         }
       }
+
+      console.log(`Completed ${completedBookings.length} bookings:`, completedBookings);
     } catch (error) {
       console.error('Error in scheduled notification task:', error);
     }
@@ -314,7 +333,7 @@ function startScheduledTasks() {
 
   scheduledTasks.push(reminderTask);
   reminderTask.start();
-  
+
   return scheduledTasks;
 }
 
