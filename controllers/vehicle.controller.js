@@ -766,7 +766,9 @@ exports.updateVehicle = async (req, res) => {
       maximumRentalDays,
       removeImages
     } = req.body;
-    console.log(req.body);
+
+    console.log("Vehicle update body:", req.body);
+
     // Validate vehicle ID
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({
@@ -775,7 +777,6 @@ exports.updateVehicle = async (req, res) => {
       });
     }
 
-    // Check if vehicle exists
     const existingVehicle = await Vehicle.findById(id);
     if (!existingVehicle) {
       return res.status(404).json({
@@ -795,18 +796,16 @@ exports.updateVehicle = async (req, res) => {
       }
     }
 
-    // Handle image updates
+    // Handle image update logic
     let carImageUrls = [...existingVehicle.carImageUrls];
-    
-    // Remove specified images
-    if (removeImages && Array.isArray(removeImages)) {
+
+    // Remove selected images
+    if (Array.isArray(removeImages)) {
       carImageUrls = carImageUrls.filter(url => !removeImages.includes(url));
     }
-    
-    // Add new images
-    if (req.files && req.files.length > 0) {
-      carImageUrls = carImageUrls.length === 0 ? [] : carImageUrls;
-      
+
+    // Upload new images
+    if (req.files && Array.isArray(req.files)) {
       for (const file of req.files) {
         try {
           const result = await uploadOnCloudinary(file.buffer);
@@ -815,12 +814,11 @@ exports.updateVehicle = async (req, res) => {
           }
         } catch (uploadError) {
           console.error("Error uploading vehicle image:", uploadError);
-          continue;
         }
       }
     }
 
-    // Validate at least one image exists
+    // Require at least one image
     if (carImageUrls.length === 0) {
       return res.status(400).json({
         success: false,
@@ -828,61 +826,56 @@ exports.updateVehicle = async (req, res) => {
       });
     }
 
-    // Filter out past blackout dates
+    // Filter blackoutDates (remove past)
     const currentDate = new Date();
-    let filteredBlackoutDates = [];
+    let filteredBlackoutDates = existingVehicle.blackoutDates || [];
     let pastDatesCount = 0;
-    
-    if (blackoutDates && Array.isArray(blackoutDates)) {
-      filteredBlackoutDates = blackoutDates.filter(date => {
-        const dateObj = new Date(date);
-        if (dateObj > currentDate) {
-          return true;
-        }
+
+    if (Array.isArray(blackoutDates)) {
+      filteredBlackoutDates = blackoutDates.filter(dateStr => {
+        const dateObj = new Date(dateStr);
+        if (dateObj > currentDate) return true;
         pastDatesCount++;
         return false;
       });
-    } else {
-      filteredBlackoutDates = existingVehicle.blackoutDates || [];
     }
 
-    // Prepare update data
+    // Build update payload safely (avoid skipping falsy but valid values)
     const updateData = {
-      ...(numberPlate && { numberPlate: numberPlate.toUpperCase() }),
-      ...(manufacturer && { manufacturer: manufacturer.toLowerCase() }),
-      ...(model && { model: model.toLowerCase() }),
-      ...(year && { year }),
-      ...(rent && { rent }),
-      ...(transmission && { transmission }),
-      ...(fuelType && { fuelType }),
-      ...(vehicleType && { vehicleType }),
-      ...(features && { features }),
-      ...(mileage && { mileage }),
-      ...(lastServiceDate && { lastServiceDate: new Date(lastServiceDate) }),
-      ...(availability && { availability }),
-      ...(cities && { cities }),
-      ...(currentLocation && { currentLocation }),
+      ...(numberPlate !== undefined && { numberPlate: numberPlate.toUpperCase() }),
+      ...(manufacturer !== undefined && { manufacturer: manufacturer.toLowerCase() }),
+      ...(model !== undefined && { model: model.toLowerCase() }),
+      ...(capacity !== undefined && { capacity }),
+      ...(characteristics !== undefined && { characteristics }),
+      ...(year !== undefined && { year }),
+      ...(rent !== undefined && { rent }),
+      ...(transmission !== undefined && { transmission }),
+      ...(fuelType !== undefined && { fuelType }),
+      ...(vehicleType !== undefined && { vehicleType }),
+      ...(features !== undefined && { features }),
+      ...(mileage !== undefined && { mileage }),
+      ...(lastServiceDate !== undefined && { lastServiceDate: new Date(lastServiceDate) }),
+      ...(availability !== undefined && { availability }),
+      ...(cities !== undefined && { cities }),
+      ...(currentLocation !== undefined && { currentLocation }),
+      ...(minimumRentalHours !== undefined && { minimumRentalHours }),
+      ...(maximumRentalDays !== undefined && { maximumRentalDays }),
       blackoutDates: filteredBlackoutDates,
-      ...(minimumRentalHours && { minimumRentalHours }),
-      ...(maximumRentalDays && { maximumRentalDays }),
-      carImageUrls
+      carImageUrls,
     };
 
-    // Update vehicle
     const updatedVehicle = await Vehicle.findByIdAndUpdate(
       id,
       updateData,
       { new: true, runValidators: true }
     );
 
-    // Prepare response
     const response = {
       success: true,
       message: "Vehicle updated successfully",
       data: updatedVehicle
     };
 
-    // Add warning if past dates were filtered
     if (pastDatesCount > 0) {
       response.warning = `${pastDatesCount} past blackout dates were removed`;
     }
@@ -893,7 +886,7 @@ exports.updateVehicle = async (req, res) => {
     console.error("Error updating vehicle:", error);
     return res.status(500).json({
       success: false,
-      error: process.env.NODE_ENV === 'production'
+      message: process.env.NODE_ENV === 'production'
         ? 'An error occurred while updating the vehicle'
         : error.message,
       ...(process.env.NODE_ENV !== 'production' && {
