@@ -17,7 +17,7 @@ const userSchema = new mongoose.Schema({
   phoneNo: { type: String, required: false },
   address: { type: String, required: false },
   profilePic: { type: String, required: false },
-  accountNo: { type: String, required: false, unique: false },
+  accountNo: { type: String, required: false, unique: false, default: null },
   city: { type: String, required: false },
   fcmToken: { type: String, required: false },
   province: { type: String, required: false },
