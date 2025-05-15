@@ -383,12 +383,12 @@ exports.login = async (req, res) => {
   try {
     const user = await User.findOne({ email:normalizedEmail });
     if (!user) {
-      return res.status(400).json({ success: false, message: 'Invalid credentials' });
+      return res.status(400).json({ success: false, message: 'Invalid email' });
     }
 
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
-      return res.status(400).json({ success: false, message: 'Invalid credentials' });
+      return res.status(400).json({ success: false, message: 'Invalid password' });
     }
 
     if (!user.isVerified) {
