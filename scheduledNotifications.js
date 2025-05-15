@@ -11,64 +11,7 @@ function minutesDiff(date1, date2) {
   return Math.floor((date2.getTime() - date1.getTime()) / (60 * 1000));
 }
 
-// Helper to compare dates (ignoring time)
-function isSameDate(date1, date2) {
-  return date1.getFullYear() === date2.getFullYear() &&
-         date1.getMonth() === date2.getMonth() &&
-         date1.getDate() === date2.getDate();
-}
-
-// Helper to check if date1 is before date2 (ignoring time)
-function isBeforeDate(date1, date2) {
-  const d1 = new Date(date1.getFullYear(), date1.getMonth(), date1.getDate());
-  const d2 = new Date(date2.getFullYear(), date2.getMonth(), date2.getDate());
-  return d1 < d2;
-}
-
 let scheduledTasks = [];
-
-// Function to remove booking period from blackout periods
-async function removeFromBlackoutPeriods(booking) {
-  try {
-    const Vehicle = mongoose.model('Vehicle');
-    const Driver = mongoose.model('Driver');
-
-    // Update vehicle's blackout periods
-    const vehicle = await Vehicle.findById(booking.idVehicle);
-    if (vehicle && vehicle.blackoutPeriods && vehicle.blackoutPeriods.length > 0) {
-      vehicle.blackoutPeriods = vehicle.blackoutPeriods.filter(period => {
-        const periodStart = new Date(period.from).getTime();
-        const periodEnd = new Date(period.to).getTime();
-        const bookingStart = booking.fromTime.getTime();
-        const bookingEnd = booking.toTime.getTime();
-        
-        // Check if the booking period doesn't overlap with blackout period
-        return !(bookingStart < periodEnd && bookingEnd > periodStart);
-      });
-      await vehicle.save();
-    }
-
-    // Update driver's blackout periods if booking has a driver
-    if (booking.idDriver) {
-      const driver = await Driver.findById(booking.idDriver);
-      if (driver && driver.blackoutPeriods && driver.blackoutPeriods.length > 0) {
-        driver.blackoutPeriods = driver.blackoutPeriods.filter(period => {
-          const periodStart = new Date(period.from).getTime();
-          const periodEnd = new Date(period.to).getTime();
-          const bookingStart = booking.fromTime.getTime();
-          const bookingEnd = booking.toTime.getTime();
-          
-          return !(bookingStart < periodEnd && bookingEnd > periodStart);
-        });
-        await driver.save();
-      }
-    }
-
-    console.log(`Removed booking period from blackout periods for booking ${booking._id}`);
-  } catch (err) {
-    console.error(`Error removing blackout periods for booking ${booking._id}:`, err);
-  }
-}
 
 // Function to start all scheduled tasks
 function startScheduledTasks() {
@@ -296,33 +239,6 @@ function startScheduledTasks() {
           console.error(`Error processing overdue notification for booking ${booking._id}:`, err);
         }
       }
-
-      // --- Complete Finished Bookings ---
-      // Get all bookings that should be completed (based on date only)
-      const bookingsToCheck = await Booking.find({
-        status: { $in: ['confirmed', 'ongoing'] }
-      });
-
-      console.log(`Checking ${bookingsToCheck.length} bookings for completion`);
-      
-      const completedBookings = [];
-      
-      for (const booking of bookingsToCheck) {
-        try {
-          // Compare dates only (ignoring time)
-          if (isBeforeDate(booking.toTime, now)) {
-            booking.status = 'completed';
-            await booking.save();
-            await removeFromBlackoutPeriods(booking);
-            completedBookings.push(booking._id);
-            console.log(`Booking ${booking._id} marked as completed.`);
-          }
-        } catch (err) {
-          console.error(`Error completing booking ${booking._id}:`, err);
-        }
-      }
-
-      console.log(`Completed ${completedBookings.length} bookings:`, completedBookings);
     } catch (error) {
       console.error('Error in scheduled notification task:', error);
     }
@@ -346,6 +262,5 @@ function stopScheduledTasks() {
 
 module.exports = {
   startScheduledTasks,
-  stopScheduledTasks,
-  removeFromBlackoutPeriods
+  stopScheduledTasks
 };
