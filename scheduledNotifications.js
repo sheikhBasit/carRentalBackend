@@ -4,7 +4,7 @@ const Booking = require('./models/booking.model');
 const User = require('./models/user.model');
 const RentalCompany = require('./models/rentalcompany.model');
 const { sendUserPushNotification, sendCompanyPushNotification } = require('./utils/firebaseConfig');
-const { sendBookingConfirmationEmail } = require('./mailtrap/email'); // Import email service
+const { sendBookingConfirmationEmail } = require('./mailtrap/email');
 
 // Helper to get time difference in minutes
 function minutesDiff(date1, date2) {
@@ -23,8 +23,13 @@ async function removeFromBlackoutPeriods(booking) {
     const vehicle = await Vehicle.findById(booking.idVehicle);
     if (vehicle && vehicle.blackoutPeriods && vehicle.blackoutPeriods.length > 0) {
       vehicle.blackoutPeriods = vehicle.blackoutPeriods.filter(period => {
-        return !(period.start.getTime() === booking.fromTime.getTime() && 
-                period.end.getTime() === booking.toTime.getTime());
+        const periodStart = new Date(period.from).getTime();
+        const periodEnd = new Date(period.to).getTime();
+        const bookingStart = booking.fromTime.getTime();
+        const bookingEnd = booking.toTime.getTime();
+        
+        // Check if the booking period doesn't overlap with blackout period
+        return !(bookingStart < periodEnd && bookingEnd > periodStart);
       });
       await vehicle.save();
     }
@@ -34,8 +39,12 @@ async function removeFromBlackoutPeriods(booking) {
       const driver = await Driver.findById(booking.idDriver);
       if (driver && driver.blackoutPeriods && driver.blackoutPeriods.length > 0) {
         driver.blackoutPeriods = driver.blackoutPeriods.filter(period => {
-          return !(period.start.getTime() === booking.fromTime.getTime() && 
-                  period.end.getTime() === booking.toTime.getTime());
+          const periodStart = new Date(period.from).getTime();
+          const periodEnd = new Date(period.to).getTime();
+          const bookingStart = booking.fromTime.getTime();
+          const bookingEnd = booking.toTime.getTime();
+          
+          return !(bookingStart < periodEnd && bookingEnd > periodStart);
         });
         await driver.save();
       }
@@ -55,40 +64,33 @@ function startScheduledTasks() {
   const reminderTask = cron.schedule('*/5 * * * *', async () => {
     console.log('Running scheduled notification tasks at:', new Date().toISOString());
     
-    // Initialize dates correctly
     const now = new Date();
     const in30min = new Date(now.getTime() + 30 * 60 * 1000);
     
-    // Create fresh Date objects for start/end of day
-    const startOfToday = new Date(now);
-    startOfToday.setHours(0, 0, 0, 0);
-    
-    const endOfToday = new Date(now);
-    endOfToday.setHours(23, 59, 59, 999);
-
     try {
       // --- Delivery Reminders ---
       const deliveryBookings = await Booking.find({
-        status: { $in: ['confirmed'] },
+        status: 'confirmed',
         fromTime: { $gte: now, $lte: in30min },
         deliveryReminderSent: { $ne: true }
-      }).populate('user', 'email name')
-        .populate('idVehicle', 'model numberPlate');
+      }).populate('user', 'email name fcmToken')
+        .populate('idVehicle', 'model numberPlate manufacturer companyId company')
+        .populate('idDriver', 'fcmToken');
 
       console.log(`Processing ${deliveryBookings.length} delivery reminders`);
       
       for (const booking of deliveryBookings) {
         try {
-          const userDoc = await User.findById(booking.user);
-          const vehicleDoc = await mongoose.model('Vehicle').findById(booking.idVehicle);
-          const companyDoc = vehicleDoc ? await RentalCompany.findById(vehicleDoc.companyId || vehicleDoc.company) : null;
+          const vehicle = booking.idVehicle;
+          const company = vehicle?.companyId || vehicle?.company;
+          const companyDoc = company ? await RentalCompany.findById(company) : null;
 
           // Send push notifications
-          if (userDoc?.fcmToken) {
+          if (booking.user?.fcmToken) {
             await sendUserPushNotification(
-              userDoc._id,
+              booking.user._id,
               'Upcoming Vehicle Delivery',
-              `Your vehicle for booking ${booking._id} will be delivered at ${booking.fromTime}.`
+              `Your ${vehicle?.manufacturer} ${vehicle?.model} will be delivered soon.`
             );
           }
 
@@ -96,74 +98,82 @@ function startScheduledTasks() {
             await sendCompanyPushNotification(
               companyDoc._id,
               'Upcoming Vehicle Delivery',
-              `A vehicle delivery for booking ${booking._id} is scheduled at ${booking.fromTime}.`
+              `Vehicle delivery for booking ${booking._id} is scheduled soon.`
             );
           }
 
-          // Send email to user
-          if (userDoc?.email) {
+          if (booking.idDriver?.fcmToken) {
+            await sendUserPushNotification(
+              booking.idDriver._id,
+              'Delivery Assignment',
+              `You have a vehicle delivery scheduled for booking ${booking._id}.`
+            );
+          }
+
+          // Send emails
+          if (booking.user?.email) {
             await sendBookingConfirmationEmail(
-              userDoc.email,
-              userDoc.name,
+              booking.user.email,
+              booking.user.name,
               {
                 _id: booking._id,
-                vehicleName: `${vehicleDoc?.manufacturer} ${vehicleDoc?.model} (${vehicleDoc?.numberPlate})`,
+                vehicleName: `${vehicle?.manufacturer} ${vehicle?.model}`,
                 from: booking.fromTime.toLocaleString(),
                 to: booking.toTime.toLocaleString()
               },
               false,
-              'Upcoming Vehicle Delivery Reminder',
-              `Your vehicle for booking ${booking._id} will be delivered at ${booking.fromTime}.`
+              'Upcoming Vehicle Delivery',
+              `Your vehicle will be delivered at ${booking.fromTime.toLocaleString()}.`
             );
           }
 
-          // Send email to company
           if (companyDoc?.email) {
             await sendBookingConfirmationEmail(
               companyDoc.email,
               companyDoc.companyName,
               {
                 _id: booking._id,
-                vehicleName: `${vehicleDoc?.manufacturer} ${vehicleDoc?.model} (${vehicleDoc?.numberPlate})`,
+                vehicleName: `${vehicle?.manufacturer} ${vehicle?.model}`,
                 from: booking.fromTime.toLocaleString(),
                 to: booking.toTime.toLocaleString(),
-                customerName: userDoc?.name || 'Customer'
+                customerName: booking.user?.name
               },
               true,
-              'Upcoming Vehicle Delivery Reminder',
-              `A vehicle delivery for booking ${booking._id} is scheduled at ${booking.fromTime}.`
+              'Upcoming Vehicle Delivery',
+              `Vehicle delivery for booking ${booking._id} is scheduled.`
             );
           }
 
           booking.deliveryReminderSent = true;
           await booking.save();
         } catch (err) {
-          console.error(`Error sending delivery reminder for booking ${booking._id}:`, err);
+          console.error(`Error processing delivery reminder for booking ${booking._id}:`, err);
         }
       }
 
       // --- Return Reminders ---
       const returnBookings = await Booking.find({
-        status: { $in: ['ongoing'] },
+        status: 'ongoing',
         toTime: { $gte: now, $lte: in30min },
         returnReminderSent: { $ne: true }
-      }).populate('user', 'email name')
-        .populate('idVehicle', 'model numberPlate');
+      }).populate('user', 'email name fcmToken')
+        .populate('idVehicle', 'model numberPlate manufacturer')
+        .populate('idDriver', 'fcmToken');
 
       console.log(`Processing ${returnBookings.length} return reminders`);
       
       for (const booking of returnBookings) {
         try {
-          const userDoc = await User.findById(booking.user);
-          const vehicleDoc = await mongoose.model('Vehicle').findById(booking.idVehicle);
-          const companyDoc = vehicleDoc ? await RentalCompany.findById(vehicleDoc.companyId || vehicleDoc.company) : null;
+          const vehicle = booking.idVehicle;
+          const company = vehicle?.companyId || vehicle?.company;
+          const companyDoc = company ? await RentalCompany.findById(company) : null;
 
           // Send push notifications
-          if (userDoc?.fcmToken) {
+          if (booking.user?.fcmToken) {
             await sendUserPushNotification(
-              userDoc._id,
+              booking.user._id,
               'Upcoming Vehicle Return',
-              `Your booking ${booking._id} is due for return at ${booking.toTime}. Please return the vehicle on time.`
+              `Please return your ${vehicle?.manufacturer} ${vehicle?.model} by ${booking.toTime.toLocaleTimeString()}.`
             );
           }
 
@@ -171,72 +181,82 @@ function startScheduledTasks() {
             await sendCompanyPushNotification(
               companyDoc._id,
               'Upcoming Vehicle Return',
-              `Vehicle for booking ${booking._id} is due for return at ${booking.toTime}.`
+              `Vehicle return for booking ${booking._id} is due soon.`
             );
           }
 
-          // Send email to user
-          if (userDoc?.email) {
+          if (booking.idDriver?.fcmToken) {
+            await sendUserPushNotification(
+              booking.idDriver._id,
+              'Return Assignment',
+              `You have a vehicle return scheduled for booking ${booking._id}.`
+            );
+          }
+
+          // Send emails
+          if (booking.user?.email) {
             await sendBookingConfirmationEmail(
-              userDoc.email,
-              userDoc.name,
+              booking.user.email,
+              booking.user.name,
               {
                 _id: booking._id,
-                vehicleName: `${vehicleDoc?.manufacturer} ${vehicleDoc?.model} (${vehicleDoc?.numberPlate})`,
+                vehicleName: `${vehicle?.manufacturer} ${vehicle?.model}`,
                 from: booking.fromTime.toLocaleString(),
                 to: booking.toTime.toLocaleString()
               },
               false,
-              'Upcoming Vehicle Return Reminder',
-              `Your booking ${booking._id} is due for return at ${booking.toTime}. Please return the vehicle on time.`
+              'Upcoming Vehicle Return',
+              `Please return your vehicle by ${booking.toTime.toLocaleString()}.`
             );
           }
 
-          // Send email to company
           if (companyDoc?.email) {
             await sendBookingConfirmationEmail(
               companyDoc.email,
               companyDoc.companyName,
               {
                 _id: booking._id,
-                vehicleName: `${vehicleDoc?.manufacturer} ${vehicleDoc?.model} (${vehicleDoc?.numberPlate})`,
+                vehicleName: `${vehicle?.manufacturer} ${vehicle?.model}`,
                 from: booking.fromTime.toLocaleString(),
                 to: booking.toTime.toLocaleString(),
-                customerName: userDoc?.name || 'Customer'
+                customerName: booking.user?.name
               },
               true,
-              'Upcoming Vehicle Return Reminder',
-              `Vehicle for booking ${booking._id} is due for return at ${booking.toTime}.`
+              'Upcoming Vehicle Return',
+              `Vehicle return for booking ${booking._id} is due soon.`
             );
           }
 
           booking.returnReminderSent = true;
           await booking.save();
         } catch (err) {
-          console.error(`Error sending return reminder for booking ${booking._id}:`, err);
+          console.error(`Error processing return reminder for booking ${booking._id}:`, err);
         }
       }
 
-      // --- Overdue Return Notifications ---
+      // --- Overdue Bookings ---
       const overdueBookings = await Booking.find({
-        status: { $in: ['ongoing'] },
+        status: 'ongoing',
         toTime: { $lt: now },
         overdueNotified: { $ne: true }
-      });
+      }).populate('user', 'fcmToken')
+        .populate('idVehicle', 'model numberPlate manufacturer')
+        .populate('idDriver', 'fcmToken');
 
       console.log(`Processing ${overdueBookings.length} overdue notifications`);
       
       for (const booking of overdueBookings) {
         try {
-          const userDoc = await User.findById(booking.user);
-          const vehicleDoc = await mongoose.model('Vehicle').findById(booking.idVehicle);
-          const companyDoc = vehicleDoc ? await RentalCompany.findById(vehicleDoc.companyId || vehicleDoc.company) : null;
+          const vehicle = booking.idVehicle;
+          const company = vehicle?.companyId || vehicle?.company;
+          const companyDoc = company ? await RentalCompany.findById(company) : null;
 
-          if (userDoc?.fcmToken) {
+          // Send push notifications
+          if (booking.user?.fcmToken) {
             await sendUserPushNotification(
-              userDoc._id,
+              booking.user._id,
               'Vehicle Return Overdue',
-              `Your booking ${booking._id} is overdue for return. Please return the vehicle as soon as possible.`
+              `Your ${vehicle?.manufacturer} ${vehicle?.model} is overdue for return.`
             );
           }
 
@@ -244,51 +264,55 @@ function startScheduledTasks() {
             await sendCompanyPushNotification(
               companyDoc._id,
               'Vehicle Return Overdue',
-              `Vehicle for booking ${booking._id} is overdue for return.`
+              `Vehicle for booking ${booking._id} is overdue.`
+            );
+          }
+
+          if (booking.idDriver?.fcmToken) {
+            await sendUserPushNotification(
+              booking.idDriver._id,
+              'Overdue Return',
+              `The vehicle for booking ${booking._id} is overdue for return.`
             );
           }
 
           booking.overdueNotified = true;
           await booking.save();
         } catch (err) {
-          console.error(`Error sending overdue notification for booking ${booking._id}:`, err);
+          console.error(`Error processing overdue notification for booking ${booking._id}:`, err);
         }
       }
 
-      // --- Auto-complete Past Bookings ---
-      const pastBookings = await Booking.find({
+      // --- Complete Finished Bookings ---
+      const completedBookings = await Booking.find({
         status: { $in: ['confirmed', 'ongoing'] },
-        fromTime: { $lt: startOfToday }, // Bookings that started before today
-        toTime: { $lt: now }             // And ended before current time
+        toTime: { $lt: now }
       });
+
+      console.log(`Processing ${completedBookings.length} bookings for completion`);
       
-      console.log(`Auto-completing ${pastBookings.length} past bookings`);
-      
-      for (const booking of pastBookings) {
+      for (const booking of completedBookings) {
         try {
-          booking.status = 'completed';
-          await booking.save();
-          
-          await removeFromBlackoutPeriods(booking);
-          
-          console.log(`Booking ${booking._id} marked as completed and removed from blackout periods.`);
+          // Add additional check to ensure booking should be completed
+          if (booking.toTime < now) {
+            booking.status = 'completed';
+            await booking.save();
+            await removeFromBlackoutPeriods(booking);
+            console.log(`Booking ${booking._id} marked as completed.`);
+          }
         } catch (err) {
-          console.error(`Error updating booking ${booking._id} status to completed:`, err);
+          console.error(`Error completing booking ${booking._id}:`, err);
         }
       }
-      
     } catch (error) {
       console.error('Error in scheduled notification task:', error);
     }
   }, {
     scheduled: false,
-    timezone: "Asia/Karachi" // Set your appropriate timezone
+    timezone: "Asia/Karachi"
   });
 
-  // Store the task for potential stopping later
   scheduledTasks.push(reminderTask);
-  
-  // Start the task
   reminderTask.start();
   
   return scheduledTasks;
@@ -303,5 +327,6 @@ function stopScheduledTasks() {
 
 module.exports = {
   startScheduledTasks,
-  stopScheduledTasks
+  stopScheduledTasks,
+  removeFromBlackoutPeriods
 };
