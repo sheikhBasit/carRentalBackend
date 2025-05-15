@@ -751,7 +751,9 @@ const getBookingById = async (req, res) => {
             {
               $project: {
                 companyName: 1,
-                gmail: 1,
+                email: 1,
+                address: 1,
+                city: 1, 
               },
             },
           ],
