@@ -4,8 +4,7 @@ const Booking = require('../models/booking.model');
 // Create a damage report (at check-in or check-out)
 exports.createDamageReport = async (req, res) => {
   try {
-    const { booking, description, images } = req.body;
-    const user = req.user._id;
+    const { booking, description, images,user } = req.body;
     const bookingDoc = await Booking.findById(booking);
     if (!bookingDoc) {
       return res.status(404).json({ success: false, error: 'Booking not found.' });

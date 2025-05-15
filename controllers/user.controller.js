@@ -1,5 +1,7 @@
 const User = require('../models/user.model.js');
 const bcrypt = require('bcrypt');
+const jwt = require("jsonwebtoken");
+
 const crypto = require('crypto'); // Added for reset token generation
 const { uploadOnCloudinary } = require('../utils/connectCloudinary.js');
 const {
@@ -316,7 +318,10 @@ exports.verifyEmail = async (req, res) => {
 	  user.verificationToken = undefined; // Clear the verification token
 	  user.verificationTokenExpiresAt = undefined; // Clear the expiration time
 	  await user.save();
-  
+      const token = jwt.sign({userId:user._id}, process.env.JWT_SECRET,{
+            expiresIn: "7d",
+        });
+    
 	  // Send welcome email
 	  try {
 		await sendWelcomeEmail(user.email, user.name);
@@ -331,6 +336,7 @@ exports.verifyEmail = async (req, res) => {
 		success: true,
 		message: 'Email verified successfully',
 		user: userSafeData,
+		token
 	  });
 	} catch (error) {
 	  console.error('Error in verifyEmail:', error);
