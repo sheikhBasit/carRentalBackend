@@ -28,14 +28,14 @@ const {
   const sendWelcomeEmail = async (email, name) => {
     try {
       const mailOptions = {
-        from: `Drive Fleet <${process.env.GMAIL_USER}>`,
+        from: `Trend Sense Capital<${process.env.GMAIL_USER}>`,
         to: email,
-        subject: "Welcome to Drive Fleet!",
+        subject: "Welcome to Trend Sense Capital!",
         html: `
-          <h2>Welcome to Drive Fleet, ${name}!</h2>
+          <h2>Welcome to Trend Sense Capital, ${name}!</h2>
           <p>Thank you for joining our platform. We're excited to have you on board.</p>
           <p>Start exploring our vehicle rental options and enjoy seamless booking experiences.</p>
-          <p>Best regards,<br/>The Drive Fleet Team</p>
+          <p>Best regards,<br/>The Trend Sense Capital Team</p>
         `
       };
   

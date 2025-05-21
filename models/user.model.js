@@ -22,6 +22,8 @@ const userSchema = new mongoose.Schema({
   fcmToken: { type: String, required: false },
   province: { type: String, required: false },
   license: { type: String, required: false },
+  investorType: { type: String, required: false },
+  
   licenseFrontUrl: { type: String, required: false },
   licenseBackUrl: { type: String, required: false },
   cnic: { type: String, required: false, unique: true },
